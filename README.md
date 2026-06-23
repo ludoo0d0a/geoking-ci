@@ -24,7 +24,15 @@ Puis édite `artifact_name` et `package_name` dans `.github/workflows/`.
 ## Prérequis
 
 1. Pousse ce dépôt sur GitHub (`ludoo0d0a/geoking-ci` ou autre).
-2. Dans chaque app, des workflows fins appellent les workflows réutilisables.
+2. **Repo privé** — autorise les workflows réutilisables pour tes autres dépôts (une fois) :
+
+```bash
+gh api repos/OWNER/geoking-ci/actions/permissions/access -X PUT -f access_level=user
+```
+
+Sans ça, les apps qui appellent `uses: OWNER/geoking-ci/.github/workflows/...` échouent avec *workflow was not found*.
+
+3. Dans chaque app, des workflows fins appellent les workflows réutilisables.
 
 ## Workflows app (templates)
 
