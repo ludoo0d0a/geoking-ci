@@ -24,15 +24,23 @@ Puis édite `artifact_name` et `package_name` dans `.github/workflows/`.
 ## Prérequis
 
 1. Pousse ce dépôt sur GitHub (`ludoo0d0a/geoking-ci` ou autre).
-2. **Repo privé** — autorise les workflows réutilisables pour tes autres dépôts (une fois) :
+2. **GitHub Free + repo privé** — les apps ne peuvent pas appeler `workflow_call` ici.
+   Copie les workflows depuis `geoking-tools/templates/` dans chaque app (voir
+   [INTEGRATION.md](https://github.com/ludoo0d0a/geoking-tools/blob/main/INTEGRATION.md)).
+3. **GitHub Team+ ou repo public** — les apps peuvent utiliser les workflows réutilisables :
+
+```yaml
+jobs:
+  build:
+    uses: ludoo0d0a/geoking-ci/.github/workflows/android-ci.yml@main
+    secrets: inherit
+```
+
+Si `geoking-ci` est privé sur Team+, autorise l'accès une fois :
 
 ```bash
 gh api repos/OWNER/geoking-ci/actions/permissions/access -X PUT -f access_level=user
 ```
-
-Sans ça, les apps qui appellent `uses: OWNER/geoking-ci/.github/workflows/...` échouent avec *workflow was not found*.
-
-3. Dans chaque app, des workflows fins appellent les workflows réutilisables.
 
 ## Workflows app (templates)
 
