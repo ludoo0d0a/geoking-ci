@@ -23,6 +23,7 @@ jobs:
 | `actions/setup-gradle/` | JDK 21 + Gradle (composite action) |
 | `.github/workflows/android-ci.yml` | Workflow réutilisable — build debug + artefact APK |
 | `.github/workflows/release-play.yml` | Workflow réutilisable — AAB signé + upload Play |
+| `scripts/netlify-ignore.sh` | Ignore build Netlify si les chemins surveillés n'ont pas changé |
 
 ## Workflows app (templates)
 
@@ -69,6 +70,23 @@ jobs:
 | `package_name` | *(requis)* | `applicationId` Play |
 | `gradle_module` | `:composeApp` | Module Gradle |
 | `java_version` | `21` | Version JDK |
+
+## Netlify (landing page)
+
+Copie `scripts/netlify-ignore.sh` dans l'app (via `geoking-tools` bootstrap) et référence-le dans `netlify.toml` :
+
+```toml
+[build]
+  publish = "website"
+  command = ""
+  ignore = "bash scripts/netlify-ignore.sh"
+
+# optionnel — chemins à surveiller (défaut : website/ netlify.toml)
+[build.environment]
+  NETLIFY_WATCH_PATHS = "website/ netlify.toml"
+```
+
+Le script compare `CACHED_COMMIT_REF` et `COMMIT_REF` (variables Netlify). Exit 0 → build ignoré ; exit 1 → déploiement.
 
 ## Secrets requis (par dépôt app)
 
