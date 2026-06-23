@@ -1,0 +1,73 @@
+name: Android CI (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      gradle_module:
+        description: 'Gradle module path (e.g. :composeApp)'
+        type: string
+        default: ':composeApp'
+      assemble_task:
+        description: 'Gradle assemble task suffix (Debug/Release)'
+        type: string
+        default: 'Debug'
+      apk_glob:
+        description: 'APK artifact glob relative to repo root'
+        type: string
+        default: 'composeApp/build/outputs/apk/debug/*.apk'
+      artifact_name:
+        description: 'Uploaded artifact name'
+        type: string
+        required: true
+      google_services_path:
+        description: 'Path to decode google-services.json into'
+        type: string
+        default: 'composeApp/google-services.json'
+      geoking_ci_repo:
+        description: 'geoking-ci repository (owner/name)'
+        type: string
+        default: 'ludoo0d0a/geoking-ci'
+      geoking_ci_ref:
+        description: 'geoking-ci ref (branch/tag/sha)'
+        type: string
+        default: 'main'
+      gradle_version:
+        description: 'Gradle version for setup-gradle action'
+        type: string
+        default: '8.13'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout geoking-ci
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.geoking_ci_repo }}
+          ref: ${{ inputs.geoking_ci_ref }}
+          path: geoking-ci
+
+      - name: Setup Gradle
+        uses: ./geoking-ci/actions/setup-gradle
+        with:
+          gradle-version: ${{ inputs.gradle_version }}
+
+      - name: Decode google-services.json (Firebase)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "${{ inputs.google_services_path }}"
+
+      - name: Assemble debug APK
+        env:
+          WEB_CLIENT_ID: ${{ secrets.WEB_CLIENT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: gradle ${{ inputs.gradle_module }}:assemble${{ inputs.assemble_task }} --no-daemon --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ inputs.apk_glob }}
+          if-no-files-found: warn

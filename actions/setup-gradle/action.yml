@@ -1,0 +1,26 @@
+name: 'Setup Gradle'
+description: 'Set up Temurin JDK 17 and Gradle (with caching) for KMP/Android builds'
+
+# Composite action — per the Kotlin Multiplatform GitHub Actions guide:
+# https://kotlinlang.org/docs/multiplatform/github-actions-for-kmp.html
+# gradle-version is pinned because the binary Gradle wrapper jar may not be committed,
+# so a standalone `gradle` is provisioned on PATH (call `gradle …`, not `./gradlew`).
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: ${{ inputs.gradle-version }}
+
+inputs:
+  gradle-version:
+    description: 'Gradle version when wrapper jar is not committed'
+    required: false
+    default: '8.13'

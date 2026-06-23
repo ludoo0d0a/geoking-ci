@@ -1,0 +1,135 @@
+name: Release to Play Store (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      package_name:
+        description: 'Android applicationId / Play package name'
+        type: string
+        required: true
+      gradle_module:
+        description: 'Gradle module path (e.g. :composeApp)'
+        type: string
+        default: ':composeApp'
+      aab_glob:
+        description: 'AAB path glob relative to repo root'
+        type: string
+        default: 'composeApp/build/outputs/bundle/release/composeApp-release.aab'
+      google_services_path:
+        description: 'Path to decode google-services.json into'
+        type: string
+        default: 'composeApp/google-services.json'
+      whatsnew_script:
+        description: 'Path to whatsnew.py (project wrapper or geoking-tools)'
+        type: string
+        default: 'scripts/whatsnew.py'
+      default_track:
+        description: 'Default Play track when not dispatching'
+        type: string
+        default: 'internal'
+      geoking_ci_repo:
+        description: 'geoking-ci repository (owner/name)'
+        type: string
+        default: 'ludoo0d0a/geoking-ci'
+      geoking_ci_ref:
+        description: 'geoking-ci ref'
+        type: string
+        default: 'main'
+      gradle_version:
+        description: 'Gradle version'
+        type: string
+        default: '8.13'
+      workflow_dispatch_track:
+        description: 'Track from workflow_dispatch (empty if push/tag)'
+        type: string
+        default: ''
+      workflow_dispatch_skip_review:
+        description: 'changesNotSentForReview from workflow_dispatch'
+        type: string
+        default: 'false'
+      is_workflow_dispatch:
+        description: 'Whether the caller run was workflow_dispatch'
+        type: string
+        default: 'false'
+      version_name_override:
+        description: 'VERSION_NAME env for Gradle (empty = playstore/version.properties)'
+        type: string
+        default: ''
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout geoking-ci
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.geoking_ci_repo }}
+          ref: ${{ inputs.geoking_ci_ref }}
+          path: geoking-ci
+
+      - name: Setup Gradle
+        uses: ./geoking-ci/actions/setup-gradle
+        with:
+          gradle-version: ${{ inputs.gradle_version }}
+
+      - name: Decode google-services.json (Firebase)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "${{ inputs.google_services_path }}"
+
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+
+      - name: Print upload-key SHA-1 (OAuth Android client)
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          SHA1="$(keytool -list -v -keystore "$KEYSTORE_FILE" -alias "$KEY_ALIAS" -storepass "$KEYSTORE_PASSWORD" \
+            | awk -F'SHA1: ' '/SHA1:/{print $2; exit}')"
+          echo "Upload-key SHA-1 (add to OAuth Android client if missing): $SHA1"
+
+      - name: Build signed AAB
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          WEB_CLIENT_ID: ${{ secrets.WEB_CLIENT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: ${{ inputs.version_name_override }}
+        run: gradle ${{ inputs.gradle_module }}:bundleRelease --no-daemon --stacktrace
+
+      - name: Generate Play release notes
+        env:
+          GEOKING_PROJECT_ROOT: ${{ github.workspace }}
+        run: python3 "${{ inputs.whatsnew_script }}" "${{ github.run_number }}"
+
+      - name: Upload to Google Play (skip review)
+        if: inputs.is_workflow_dispatch == 'true' && inputs.workflow_dispatch_skip_review == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ inputs.package_name }}
+          releaseFiles: ${{ inputs.aab_glob }}
+          whatsNewDirectory: playstore/whatsnew
+          track: ${{ inputs.workflow_dispatch_track || inputs.default_track }}
+          status: completed
+          changesNotSentForReview: true
+
+      - name: Upload to Google Play
+        if: inputs.is_workflow_dispatch != 'true' || inputs.workflow_dispatch_skip_review != 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ inputs.package_name }}
+          releaseFiles: ${{ inputs.aab_glob }}
+          whatsNewDirectory: playstore/whatsnew
+          track: ${{ inputs.workflow_dispatch_track || inputs.default_track }}
+          status: completed
