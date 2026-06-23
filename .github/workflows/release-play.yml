@@ -113,7 +113,7 @@ jobs:
 
       - name: Generate Play release notes
         env:
-          GEOKING_PROJECT_ROOT: ${{ github.workspace }}
+          GK_PROJECT_ROOT: ${{ github.workspace }}
         run: python3 "${{ inputs.whatsnew_script }}" "${{ github.run_number }}"
 
       - name: Upload to Google Play (skip review)
