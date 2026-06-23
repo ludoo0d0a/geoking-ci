@@ -39,6 +39,10 @@ on:
         description: 'Gradle version'
         type: string
         default: '8.13'
+      java_version:
+        description: 'JDK version'
+        type: string
+        default: '21'
       workflow_dispatch_track:
         description: 'Track from workflow_dispatch (empty if push/tag)'
         type: string
@@ -73,6 +77,7 @@ jobs:
         uses: ./geoking-ci/actions/setup-gradle
         with:
           gradle-version: ${{ inputs.gradle_version }}
+          java-version: ${{ inputs.java_version }}
 
       - name: Decode google-services.json (Firebase)
         env:
