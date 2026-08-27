@@ -23,7 +23,6 @@ jobs:
 | `actions/setup-gradle/` | JDK 21 + Gradle (composite action) |
 | `.github/workflows/android-ci.yml` | Workflow réutilisable — build debug + artefact APK |
 | `.github/workflows/release-play.yml` | Workflow réutilisable — AAB signé + upload Play |
-| `scripts/netlify-ignore.sh` | Ignore build Netlify si les chemins surveillés n'ont pas changé |
 
 ## Workflows app (templates)
 
@@ -71,25 +70,18 @@ jobs:
 | `gradle_module` | `:composeApp` | Module Gradle |
 | `java_version` | `21` | Version JDK |
 
-## Netlify (landing page)
+## Landing page (Cloudflare Pages)
 
-Copie `scripts/netlify-ignore.sh` dans l'app (via `geoking-tools` bootstrap) et référence-le dans `netlify.toml` :
-
-```toml
-[build]
-  publish = "website"
-  command = ""
-  ignore = "bash scripts/netlify-ignore.sh"
-
-# optionnel — chemins à surveiller (défaut : website/ netlify.toml)
-[build.environment]
-  NETLIFY_WATCH_PATHS = "website/ netlify.toml"
-```
-
-Le script compare `CACHED_COMMIT_REF` et `COMMIT_REF` (variables Netlify). Exit 0 → build ignoré ; exit 1 → déploiement.
+La landing `website/` se déploie sur **Cloudflare Pages**, pas Netlify. Le bootstrap
+`geoking-tools` copie `.github/workflows/cloudflare-pages.yml` et `wrangler.toml`.
+Secrets GitHub : `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 
 ## Secrets requis (par dépôt app)
 
 `GOOGLE_SERVICES_JSON`, `WEB_CLIENT_ID`, `GEMINI_API_KEY`, `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`, `PLAY_SERVICE_ACCOUNT_JSON`
 
 Configurer via `./scripts/setup-release.sh` ([geoking-tools](https://github.com/ludoo0d0a/geoking-tools)).
+
+**Play Console permissions** for that service account (testing / production / listing):  
+→ [`docs/play-service-account-permissions.md`](docs/play-service-account-permissions.md)  
+(canonical detail in [geoking-tools](https://github.com/ludoo0d0a/geoking-tools/blob/main/playstore-listing/service-account-permissions.md))
