@@ -164,7 +164,7 @@ jobs:
           packageName: ${{ inputs.package_name }}
           releaseFiles: ${{ inputs.aab_glob }}
           whatsNewDirectory: playstore/whatsnew
-          track: ${{ inputs.workflow_dispatch_track || inputs.default_track }}
+          tracks: ${{ inputs.workflow_dispatch_track || inputs.default_track }}
           status: completed
           changesNotSentForReview: true
 
@@ -176,5 +176,5 @@ jobs:
           packageName: ${{ inputs.package_name }}
           releaseFiles: ${{ inputs.aab_glob }}
           whatsNewDirectory: playstore/whatsnew
-          track: ${{ inputs.workflow_dispatch_track || inputs.default_track }}
+          tracks: ${{ inputs.workflow_dispatch_track || inputs.default_track }}
           status: completed
