@@ -35,6 +35,14 @@ on:
         description: 'geoking-ci ref'
         type: string
         default: 'main'
+      geoking_tools_repo:
+        description: 'geoking-tools repository (owner/name) for whatsnew.py'
+        type: string
+        default: 'ludoo0d0a/geoking-tools'
+      geoking_tools_ref:
+        description: 'geoking-tools ref'
+        type: string
+        default: 'main'
       gradle_version:
         description: 'Gradle version (wrapper = project gradle-wrapper.properties)'
         type: string
@@ -72,6 +80,13 @@ jobs:
           repository: ${{ inputs.geoking_ci_repo }}
           ref: ${{ inputs.geoking_ci_ref }}
           path: geoking-ci
+
+      - name: Checkout geoking-tools
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.geoking_tools_repo }}
+          ref: ${{ inputs.geoking_tools_ref }}
+          path: geoking-tools
 
       - name: Setup Gradle
         uses: ./geoking-ci/actions/setup-gradle
@@ -138,6 +153,7 @@ jobs:
       - name: Generate Play release notes
         env:
           GK_PROJECT_ROOT: ${{ github.workspace }}
+          GK_TOOLS: ${{ github.workspace }}/geoking-tools
         run: python3 "${{ inputs.whatsnew_script }}" "${{ github.run_number }}"
 
       - name: Upload to Google Play (skip review)
