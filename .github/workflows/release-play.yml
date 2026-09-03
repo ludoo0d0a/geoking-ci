@@ -36,9 +36,9 @@ on:
         type: string
         default: 'main'
       gradle_version:
-        description: 'Gradle version'
+        description: 'Gradle version (wrapper = project gradle-wrapper.properties)'
         type: string
-        default: '8.13'
+        default: 'wrapper'
       java_version:
         description: 'JDK version'
         type: string
@@ -109,7 +109,31 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: ${{ inputs.version_name_override }}
-        run: gradle ${{ inputs.gradle_module }}:bundleRelease --no-daemon --stacktrace
+        run: |
+          echo "Building versionCode=${VERSION_CODE} versionName=${VERSION_NAME:-(from version.properties)}"
+          ./gradlew ${{ inputs.gradle_module }}:bundleRelease --no-daemon --stacktrace
+
+      - name: Build summary
+        if: always()
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: ${{ inputs.version_name_override }}
+          TRACK: ${{ inputs.workflow_dispatch_track || inputs.default_track }}
+        run: |
+          VN="${VERSION_NAME:-}"
+          if [ -z "$VN" ] && [ -f playstore/version.properties ]; then
+            VN="$(grep '^versionName=' playstore/version.properties | cut -d= -f2-) (from version.properties)"
+          fi
+          {
+            echo "### Release build"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Package | \`${{ inputs.package_name }}\` |"
+            echo "| versionCode | \`${VERSION_CODE}\` |"
+            echo "| versionName | \`${VN:-?}\` |"
+            echo "| Track | \`${TRACK}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate Play release notes
         env:
