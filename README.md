@@ -80,6 +80,8 @@ Secrets GitHub : `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 
 `GOOGLE_SERVICES_JSON`, `WEB_CLIENT_ID`, `GEMINI_API_KEY`, `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`, `PLAY_SERVICE_ACCOUNT_JSON`
 
+Optional (passed through to Gradle when present; blank if unset): `REVENUECAT_API_KEY`, `PEXELS_API_KEY`, `UNSPLASH_ACCESS_KEY`, `UNSPLASH_SECRET_KEY`, `PIXABAY_API_KEY`, `COVERR_API_KEY`, `EUROPEANA_API_KEY`, `HARVARD_API_KEY`, `SMITHSONIAN_API_KEY`
+
 Configurer via `./scripts/setup-release.sh` ([geoking-tools](https://github.com/ludoo0d0a/geoking-tools)).
 
 **Play Console permissions** for that service account (testing / production / listing):  
