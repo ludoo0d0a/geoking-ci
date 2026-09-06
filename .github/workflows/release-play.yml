@@ -131,6 +131,7 @@ jobs:
           EUROPEANA_API_KEY: ${{ secrets.EUROPEANA_API_KEY }}
           HARVARD_API_KEY: ${{ secrets.HARVARD_API_KEY }}
           SMITHSONIAN_API_KEY: ${{ secrets.SMITHSONIAN_API_KEY }}
+          DEBUG_DEV: ${{ secrets.DEBUG_DEV }}
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: ${{ inputs.version_name_override }}
         run: |
