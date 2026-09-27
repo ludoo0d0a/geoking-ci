@@ -23,7 +23,7 @@ jobs:
 | `actions/setup-gradle/` | JDK 21 + Gradle (composite action) |
 | `.github/workflows/android-ci.yml` | Workflow réutilisable — build debug + artefact APK |
 | `.github/workflows/release-play.yml` | Workflow réutilisable — AAB signé + upload Play |
-| `docs/local-release.md` | **Fallback hors CI** — `geoking-tools` `release-play-local.sh` |
+| `docs/local-release.md` | **Fallback hors CI** — `geoking-tools` `build-and-publish.sh` |
 
 ## Workflows app (templates)
 
@@ -92,8 +92,8 @@ Configurer via `./scripts/setup-release.sh` ([geoking-tools](https://github.com/
 Publie depuis la machine locale (même flux que ce workflow) :
 
 ```bash
-./scripts/release-play-local.sh              # piste internal
-./scripts/release-play-local.sh --track alpha -y
+./scripts/build-and-publish.sh              # piste internal
+./scripts/build-and-publish.sh --track alpha -y
 ```
 
 Détail : [`docs/local-release.md`](docs/local-release.md).
