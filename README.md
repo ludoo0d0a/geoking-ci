@@ -69,6 +69,8 @@ jobs:
 |---|---|---|
 | `package_name` | *(requis)* | `applicationId` Play |
 | `gradle_module` | `:composeApp` | Module Gradle |
+| `bundle_task` | `bundleRelease` | Task Gradle (`bundlePlaystoreRelease` pour flavors) |
+| `version_code_override` | `github.run_number` | Force `VERSION_CODE` (ex. schéma Gaston `run*10+attempt`) |
 | `java_version` | `21` | Version JDK |
 
 ## Landing page (Cloudflare Pages)

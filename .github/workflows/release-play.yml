@@ -11,6 +11,10 @@ on:
         description: 'Gradle module path (e.g. :composeApp)'
         type: string
         default: ':composeApp'
+      bundle_task:
+        description: 'Gradle bundle task name (e.g. bundleRelease or bundlePlaystoreRelease)'
+        type: string
+        default: 'bundleRelease'
       aab_glob:
         description: 'AAB path glob relative to repo root'
         type: string
@@ -67,6 +71,10 @@ on:
         description: 'VERSION_NAME env for Gradle (empty = playstore/version.properties)'
         type: string
         default: ''
+      version_code_override:
+        description: 'VERSION_CODE env for Gradle (empty = github.run_number)'
+        type: string
+        default: ''
       unit_test_tasks:
         description: >-
           Space-separated Gradle unit-test tasks. Empty = ${gradle_module}:testDebugUnitTest.
@@ -81,6 +89,17 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      # Canonical geoking names, with legacy Gaston aliases.
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 || secrets.SIGNING_KEY }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || secrets.KEY_STORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS || secrets.ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON || secrets.SERVICE_ACCOUNT_JSON }}
+      WEB_CLIENT_ID: ${{ secrets.WEB_CLIENT_ID || secrets.GOOGLE_WEB_CLIENT_ID }}
+      GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID || secrets.WEB_CLIENT_ID }}
+      VERSION_CODE: ${{ inputs.version_code_override != '' && inputs.version_code_override || github.run_number }}
+      VERSION_NAME: ${{ inputs.version_name_override }}
     steps:
       - uses: actions/checkout@v4
 
@@ -107,13 +126,12 @@ jobs:
       - name: Decode google-services.json (Firebase)
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "${{ inputs.google_services_path }}"
+        run: bash geoking-ci/scripts/write-google-services.sh "${{ inputs.google_services_path }}"
 
       - name: Unit tests
         if: ${{ inputs.skip_unit_tests != true }}
         env:
           GK_TOOLS: ${{ github.workspace }}/geoking-tools
-          WEB_CLIENT_ID: ${{ secrets.WEB_CLIENT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
@@ -125,6 +143,21 @@ jobs:
           HARVARD_API_KEY: ${{ secrets.HARVARD_API_KEY }}
           SMITHSONIAN_API_KEY: ${{ secrets.SMITHSONIAN_API_KEY }}
           DEBUG_DEV: ${{ secrets.DEBUG_DEV }}
+          GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
+          OPENCHARGEMAP_KEY: ${{ secrets.OPENCHARGEMAP_KEY }}
+          MOBILITEIT_LUXEMBOURG_KEY: ${{ secrets.MOBILITEIT_LUXEMBOURG_KEY }}
+          TOMTOM_KEY: ${{ secrets.TOMTOM_KEY }}
+          CHARGY_API_KEY: ${{ secrets.CHARGY_API_KEY }}
+          GERMANY_TANKERKOENIG_KEY: ${{ secrets.GERMANY_TANKERKOENIG_KEY }}
+          FASTNED_UK_KEY: ${{ secrets.FASTNED_UK_KEY }}
+          ROMANIA_PECO_APPLICATION_ID: ${{ secrets.ROMANIA_PECO_APPLICATION_ID }}
+          ROMANIA_PECO_CLIENT_KEY: ${{ secrets.ROMANIA_PECO_CLIENT_KEY }}
+          DKV_SUBSCRIPTION_KEY: ${{ secrets.DKV_SUBSCRIPTION_KEY }}
+          DKV_AUTHORIZATION: ${{ secrets.DKV_AUTHORIZATION }}
+          ECO_MOVEMENT_KEY: ${{ secrets.ECO_MOVEMENT_KEY }}
+          FUELPRICES_DK_KEY: ${{ secrets.FUELPRICES_DK_KEY }}
+          NSW_FUELCHECK_KEY: ${{ secrets.NSW_FUELCHECK_KEY }}
+          NSW_FUELCHECK_SECRET: ${{ secrets.NSW_FUELCHECK_SECRET }}
         run: |
           TASKS="${{ inputs.unit_test_tasks }}"
           if [ -z "$TASKS" ]; then
@@ -134,15 +167,14 @@ jobs:
           ./gradlew $TASKS --no-daemon --stacktrace
 
       - name: Decode signing keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+        run: |
+          [ -n "$KEYSTORE_BASE64" ] || { echo "::error::KEYSTORE_BASE64 / SIGNING_KEY secret missing"; exit 1; }
+          echo "$KEYSTORE_BASE64" | tr -d '\n' | base64 --decode > "$RUNNER_TEMP/release.keystore"
+          [ -s "$RUNNER_TEMP/release.keystore" ] || { echo "::error::Keystore decode produced empty file"; exit 1; }
 
       - name: Print upload-key SHA-1 (OAuth Android client)
         env:
           KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           SHA1="$(keytool -list -v -keystore "$KEYSTORE_FILE" -alias "$KEY_ALIAS" -storepass "$KEYSTORE_PASSWORD" \
             | awk -F'SHA1: ' '/SHA1:/{print $2; exit}')"
@@ -152,10 +184,6 @@ jobs:
         env:
           GK_TOOLS: ${{ github.workspace }}/geoking-tools
           KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          WEB_CLIENT_ID: ${{ secrets.WEB_CLIENT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
@@ -167,17 +195,28 @@ jobs:
           HARVARD_API_KEY: ${{ secrets.HARVARD_API_KEY }}
           SMITHSONIAN_API_KEY: ${{ secrets.SMITHSONIAN_API_KEY }}
           DEBUG_DEV: ${{ secrets.DEBUG_DEV }}
-          VERSION_CODE: ${{ github.run_number }}
-          VERSION_NAME: ${{ inputs.version_name_override }}
+          GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
+          OPENCHARGEMAP_KEY: ${{ secrets.OPENCHARGEMAP_KEY }}
+          MOBILITEIT_LUXEMBOURG_KEY: ${{ secrets.MOBILITEIT_LUXEMBOURG_KEY }}
+          TOMTOM_KEY: ${{ secrets.TOMTOM_KEY }}
+          CHARGY_API_KEY: ${{ secrets.CHARGY_API_KEY }}
+          GERMANY_TANKERKOENIG_KEY: ${{ secrets.GERMANY_TANKERKOENIG_KEY }}
+          FASTNED_UK_KEY: ${{ secrets.FASTNED_UK_KEY }}
+          ROMANIA_PECO_APPLICATION_ID: ${{ secrets.ROMANIA_PECO_APPLICATION_ID }}
+          ROMANIA_PECO_CLIENT_KEY: ${{ secrets.ROMANIA_PECO_CLIENT_KEY }}
+          DKV_SUBSCRIPTION_KEY: ${{ secrets.DKV_SUBSCRIPTION_KEY }}
+          DKV_AUTHORIZATION: ${{ secrets.DKV_AUTHORIZATION }}
+          ECO_MOVEMENT_KEY: ${{ secrets.ECO_MOVEMENT_KEY }}
+          FUELPRICES_DK_KEY: ${{ secrets.FUELPRICES_DK_KEY }}
+          NSW_FUELCHECK_KEY: ${{ secrets.NSW_FUELCHECK_KEY }}
+          NSW_FUELCHECK_SECRET: ${{ secrets.NSW_FUELCHECK_SECRET }}
         run: |
           echo "Building versionCode=${VERSION_CODE} versionName=${VERSION_NAME:-(from version.properties)}"
-          ./gradlew ${{ inputs.gradle_module }}:bundleRelease --no-daemon --stacktrace
+          ./gradlew ${{ inputs.gradle_module }}:${{ inputs.bundle_task }} --no-daemon --stacktrace
 
       - name: Build summary
         if: always()
         env:
-          VERSION_CODE: ${{ github.run_number }}
-          VERSION_NAME: ${{ inputs.version_name_override }}
           TRACK: ${{ inputs.workflow_dispatch_track || inputs.default_track }}
         run: |
           VN="${VERSION_NAME:-}"
@@ -199,13 +238,19 @@ jobs:
         env:
           GK_PROJECT_ROOT: ${{ github.workspace }}
           GK_TOOLS: ${{ github.workspace }}/geoking-tools
-        run: python3 "${{ inputs.whatsnew_script }}" "${{ github.run_number }}"
+        run: |
+          if [ -f "${{ inputs.whatsnew_script }}" ]; then
+            python3 "${{ inputs.whatsnew_script }}" "$VERSION_CODE"
+          else
+            mkdir -p playstore/whatsnew
+            echo "Build ${VERSION_CODE}" > playstore/whatsnew/whatsnew-en-US
+          fi
 
       - name: Upload to Google Play (skip review)
         if: inputs.is_workflow_dispatch == 'true' && inputs.workflow_dispatch_skip_review == 'true'
         uses: r0adkll/upload-google-play@v1
         with:
-          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          serviceAccountJsonPlainText: ${{ env.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: ${{ inputs.package_name }}
           releaseFiles: ${{ inputs.aab_glob }}
           whatsNewDirectory: playstore/whatsnew
@@ -217,7 +262,7 @@ jobs:
         if: inputs.is_workflow_dispatch != 'true' || inputs.workflow_dispatch_skip_review != 'true'
         uses: r0adkll/upload-google-play@v1
         with:
-          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          serviceAccountJsonPlainText: ${{ env.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: ${{ inputs.package_name }}
           releaseFiles: ${{ inputs.aab_glob }}
           whatsNewDirectory: playstore/whatsnew
