@@ -23,6 +23,7 @@ jobs:
 | `actions/setup-gradle/` | JDK 21 + Gradle (composite action) |
 | `.github/workflows/android-ci.yml` | Workflow réutilisable — build debug + artefact APK |
 | `.github/workflows/release-play.yml` | Workflow réutilisable — AAB signé + upload Play |
+| `docs/local-release.md` | **Fallback hors CI** — `geoking-tools` `release-play-local.sh` |
 
 ## Workflows app (templates)
 
@@ -83,6 +84,17 @@ Secrets GitHub : `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 Optional (passed through to Gradle when present; blank if unset): `REVENUECAT_API_KEY`, `PEXELS_API_KEY`, `UNSPLASH_ACCESS_KEY`, `UNSPLASH_SECRET_KEY`, `PIXABAY_API_KEY`, `COVERR_API_KEY`, `EUROPEANA_API_KEY`, `HARVARD_API_KEY`, `SMITHSONIAN_API_KEY`, `DEBUG_DEV`
 
 Configurer via `./scripts/setup-release.sh` ([geoking-tools](https://github.com/ludoo0d0a/geoking-tools)).
+
+### Actions minutes épuisés ?
+
+Publie depuis la machine locale (même flux que ce workflow) :
+
+```bash
+./scripts/release-play-local.sh              # piste internal
+./scripts/release-play-local.sh --track alpha -y
+```
+
+Détail : [`docs/local-release.md`](docs/local-release.md).
 
 **Play Console permissions** for that service account (testing / production / listing):  
 → [`docs/play-service-account-permissions.md`](docs/play-service-account-permissions.md)  
