@@ -67,6 +67,16 @@ on:
         description: 'VERSION_NAME env for Gradle (empty = playstore/version.properties)'
         type: string
         default: ''
+      unit_test_tasks:
+        description: >-
+          Space-separated Gradle unit-test tasks. Empty = ${gradle_module}:testDebugUnitTest.
+          Set skip_unit_tests=true to skip entirely.
+        type: string
+        default: ''
+      skip_unit_tests:
+        description: 'Skip unit tests (build + Play only)'
+        type: boolean
+        default: false
 
 jobs:
   release:
@@ -98,6 +108,30 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: echo "$GOOGLE_SERVICES_JSON" | base64 --decode > "${{ inputs.google_services_path }}"
+
+      - name: Unit tests
+        if: ${{ inputs.skip_unit_tests != true }}
+        env:
+          GK_TOOLS: ${{ github.workspace }}/geoking-tools
+          WEB_CLIENT_ID: ${{ secrets.WEB_CLIENT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
+          UNSPLASH_SECRET_KEY: ${{ secrets.UNSPLASH_SECRET_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          COVERR_API_KEY: ${{ secrets.COVERR_API_KEY }}
+          EUROPEANA_API_KEY: ${{ secrets.EUROPEANA_API_KEY }}
+          HARVARD_API_KEY: ${{ secrets.HARVARD_API_KEY }}
+          SMITHSONIAN_API_KEY: ${{ secrets.SMITHSONIAN_API_KEY }}
+          DEBUG_DEV: ${{ secrets.DEBUG_DEV }}
+        run: |
+          TASKS="${{ inputs.unit_test_tasks }}"
+          if [ -z "$TASKS" ]; then
+            TASKS="${{ inputs.gradle_module }}:testDebugUnitTest"
+          fi
+          echo "Running unit tests: $TASKS"
+          ./gradlew $TASKS --no-daemon --stacktrace
 
       - name: Decode signing keystore
         env:
