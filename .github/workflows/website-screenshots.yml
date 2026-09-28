@@ -1,0 +1,110 @@
+name: Website screenshots (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      screenshot_locales:
+        description: 'Roborazzi locales (en,fr or all)'
+        type: string
+        default: 'en,fr'
+      copy_only:
+        description: 'Skip Roborazzi; only run fill_website_screenshots.py (true/false)'
+        type: string
+        default: 'false'
+      gradle_command:
+        description: 'Gradle task that generates + syncs website screenshots'
+        type: string
+        default: 'generateWebsiteScreenshots'
+      fill_script:
+        description: 'Copy-only fill script path (relative to repo root)'
+        type: string
+        default: 'scripts/fill_website_screenshots.py'
+      assets_path:
+        description: 'Website assets path to commit when dirty'
+        type: string
+        default: 'website/assets'
+      geoking_ci_repo:
+        description: 'geoking-ci repository (owner/name)'
+        type: string
+        default: 'ludoo0d0a/geoking-ci'
+      geoking_ci_ref:
+        description: 'geoking-ci ref'
+        type: string
+        default: 'main'
+      geoking_tools_repo:
+        description: 'geoking-tools repository (owner/name)'
+        type: string
+        default: 'ludoo0d0a/geoking-tools'
+      geoking_tools_ref:
+        description: 'geoking-tools ref'
+        type: string
+        default: 'main'
+      gradle_version:
+        description: 'Gradle version for setup-gradle (wrapper = project gradle-wrapper.properties)'
+        type: string
+        default: 'wrapper'
+      java_version:
+        description: 'JDK version'
+        type: string
+        default: '21'
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout geoking-ci
+        if: ${{ inputs.copy_only != 'true' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.geoking_ci_repo }}
+          ref: ${{ inputs.geoking_ci_ref }}
+          path: geoking-ci
+
+      - name: Checkout geoking-tools
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.geoking_tools_repo }}
+          ref: ${{ inputs.geoking_tools_ref }}
+          path: geoking-tools
+
+      - name: Point GK_TOOLS at checked-out tools
+        run: echo "GK_TOOLS=${{ github.workspace }}/geoking-tools" >> "$GITHUB_ENV"
+
+      - name: Setup Gradle (JDK + Android SDK)
+        if: ${{ inputs.copy_only != 'true' }}
+        uses: ./geoking-ci/actions/setup-gradle
+        with:
+          gradle-version: ${{ inputs.gradle_version }}
+          java-version: ${{ inputs.java_version }}
+
+      - name: Make gradlew executable
+        if: ${{ inputs.copy_only != 'true' }}
+        run: chmod +x ./gradlew
+
+      - name: Generate + sync website screenshots
+        if: ${{ inputs.copy_only != 'true' }}
+        run: ./gradlew ${{ inputs.gradle_command }} -PscreenshotLocales=${{ inputs.screenshot_locales }} --stacktrace
+
+      - name: Sync website screenshots (copy only)
+        if: ${{ inputs.copy_only == 'true' }}
+        run: |
+          python3 "${{ inputs.fill_script }}" --locales "${{ inputs.screenshot_locales }}"
+
+      - name: Commit website assets
+        run: |
+          if [ -z "$(git status --porcelain "${{ inputs.assets_path }}")" ]; then
+            echo "No ${{ inputs.assets_path }} changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${{ inputs.assets_path }}"
+          git commit -m "chore(website): sync screenshots (${{ inputs.screenshot_locales }})"
+          git push

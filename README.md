@@ -29,6 +29,8 @@ contient que les Actions réutilisables + la composite `setup-gradle`.
 | `actions/setup-gradle/` | JDK 21 + Gradle (composite action) |
 | `.github/workflows/android-ci.yml` | Workflow réutilisable — build debug + artefact APK |
 | `.github/workflows/release-play.yml` | Workflow réutilisable — AAB signé + upload Play |
+| `.github/workflows/cloudflare-pages.yml` | Workflow réutilisable — deploy `website/` → Cloudflare Pages |
+| `.github/workflows/website-screenshots.yml` | Workflow réutilisable — Roborazzi + sync `website/assets` |
 | `docs/local-release.md` | **Fallback hors CI** — `geoking-tools` `build-and-publish.sh` |
 | `docs/play-service-account-permissions.md` | Pointeur vers la doc permissions Play (geoking-tools) |
 
@@ -103,10 +105,43 @@ Si le module n’est pas `:composeApp`, passer aussi `gradle_module`, `apk_glob`
 | `version_code_override` | `github.run_number` | Force `VERSION_CODE` (ex. schéma Gaston `run*10+attempt`) |
 | `java_version` | `21` | Version JDK |
 
-## Landing page (Cloudflare Pages)
+## Landing page (Cloudflare Pages + screenshots)
 
-La landing `website/` se déploie sur **Cloudflare Pages**, pas Netlify. Le bootstrap
-`geoking-tools` copie `.github/workflows/cloudflare-pages.yml` et `wrangler.toml`.
+Callers minces dans l’app (templates `geoking-tools`) :
+
+```yaml
+# .github/workflows/cloudflare-pages.yml
+jobs:
+  deploy:
+    uses: ludoo0d0a/geoking-ci/.github/workflows/cloudflare-pages.yml@main
+    with:
+      pages_project_name: myapp   # ← wrangler / Pages project
+    secrets: inherit
+```
+
+```yaml
+# .github/workflows/website-screenshots.yml
+jobs:
+  screenshots:
+    uses: ludoo0d0a/geoking-ci/.github/workflows/website-screenshots.yml@main
+    with:
+      screenshot_locales: ${{ github.event.inputs.screenshot_locales || 'en,fr' }}
+      copy_only: ${{ github.event.inputs.copy_only || 'false' }}
+    secrets: inherit
+```
+
+| Input (`cloudflare-pages`) | Défaut | Description |
+|---|---|---|
+| `pages_project_name` | *(requis)* | Nom du projet Cloudflare Pages |
+| `deploy_dir` | `website` | Dossier publié |
+| `production_branch` | `main` | Branche prod à la création du projet |
+
+| Input (`website-screenshots`) | Défaut | Description |
+|---|---|---|
+| `screenshot_locales` | `en,fr` | Locales Roborazzi / fill |
+| `copy_only` | `false` | `true` = skip Gradle, fill only |
+| `gradle_command` | `generateWebsiteScreenshots` | Task Gradle |
+
 Secrets GitHub : `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 
 ## Secrets requis (par dépôt app)

@@ -1,0 +1,46 @@
+name: Cloudflare Pages (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      pages_project_name:
+        description: 'Cloudflare Pages project name (wrangler / dashboard)'
+        type: string
+        required: true
+      deploy_dir:
+        description: 'Directory to publish (static site root)'
+        type: string
+        default: 'website'
+      production_branch:
+        description: 'Production branch when creating the Pages project'
+        type: string
+        default: 'main'
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure Cloudflare Pages project exists
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages project create ${{ inputs.pages_project_name }} --production-branch=${{ inputs.production_branch }}
+        continue-on-error: true
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy ${{ inputs.deploy_dir }} --project-name=${{ inputs.pages_project_name }} --commit-dirty=true
