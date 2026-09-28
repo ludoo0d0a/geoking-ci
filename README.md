@@ -2,7 +2,9 @@
 
 GitHub Actions partagées pour les apps Android GeoKing (KMP / Compose).
 
-> **Intégrer dans une nouvelle app** → [geoking-tools/INTEGRATION.md](https://github.com/ludoo0d0a/geoking-tools/blob/main/INTEGRATION.md)
+> **Intégrer dans une nouvelle app** → [geoking-tools/INTEGRATION.md](https://github.com/ludoo0d0a/geoking-tools/blob/main/INTEGRATION.md)  
+> **App from zero** → skill [gk-new-geoking-app](https://github.com/ludoo0d0a/geoking-tools/blob/main/skills/gk-new-geoking-app/SKILL.md)  
+> **Manifest app** → [project-manifest.sh](https://github.com/ludoo0d0a/geoking-tools/blob/main/bin/project-manifest.sh) + skill [gk-project-manifest](https://github.com/ludoo0d0a/geoking-tools/blob/main/skills/gk-project-manifest/SKILL.md)
 
 ## Prérequis
 
@@ -16,6 +18,10 @@ jobs:
     secrets: inherit
 ```
 
+Les scripts locaux (release, manifest, adb) vivent dans
+**[geoking-tools](https://github.com/ludoo0d0a/geoking-tools)** — ce repo ne
+contient que les Actions réutilisables + la composite `setup-gradle`.
+
 ## Contenu
 
 | Chemin | Rôle |
@@ -24,6 +30,27 @@ jobs:
 | `.github/workflows/android-ci.yml` | Workflow réutilisable — build debug + artefact APK |
 | `.github/workflows/release-play.yml` | Workflow réutilisable — AAB signé + upload Play |
 | `docs/local-release.md` | **Fallback hors CI** — `geoking-tools` `build-and-publish.sh` |
+| `docs/play-service-account-permissions.md` | Pointeur vers la doc permissions Play (geoking-tools) |
+
+## Bootstrap (côté app)
+
+Depuis la racine d’une app sibling de `geoking-tools` :
+
+```bash
+../geoking-tools/templates/bootstrap-new-app.sh --package fr.geoking.myapp --name MyApp
+```
+
+Ça crée les callers CI (templates ci-dessous), les wrappers `scripts/`, et le
+manifest via `./scripts/project-manifest.sh init`. Ensuite :
+
+```bash
+./scripts/project-manifest.sh apply --project-id … --play-developer-id … --play-app-id …
+./scripts/project-manifest.sh validate
+./scripts/setup-release.sh
+```
+
+Aligner les inputs CI avec le manifest (`build.gradleModule`, package) —
+voir INTEGRATION §1 et §6.
 
 ## Workflows app (templates)
 
@@ -53,6 +80,9 @@ jobs:
     secrets: inherit
 ```
 
+Si le module n’est pas `:composeApp`, passer aussi `gradle_module`, `apk_glob`,
+`aab_glob` (mêmes valeurs que `build.*` dans `scripts/project.manifest.json`).
+
 ## Inputs des workflows réutilisables
 
 ### `android-ci.yml`
@@ -60,14 +90,14 @@ jobs:
 | Input | Défaut | Description |
 |---|---|---|
 | `artifact_name` | *(requis)* | Nom de l'artefact APK uploadé |
-| `gradle_module` | `:composeApp` | Module Gradle |
+| `gradle_module` | `:composeApp` | Module Gradle (aligner avec le manifest) |
 | `java_version` | `21` | Version JDK |
 
 ### `release-play.yml`
 
 | Input | Défaut | Description |
 |---|---|---|
-| `package_name` | *(requis)* | `applicationId` Play |
+| `package_name` | *(requis)* | `applicationId` Play (= `project.package` du manifest) |
 | `gradle_module` | `:composeApp` | Module Gradle |
 | `bundle_task` | `bundleRelease` | Task Gradle (`bundlePlaystoreRelease` pour flavors) |
 | `version_code_override` | `github.run_number` | Force `VERSION_CODE` (ex. schéma Gaston `run*10+attempt`) |
@@ -85,7 +115,9 @@ Secrets GitHub : `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
 
 Optional (passed through to Gradle when present; blank if unset): `REVENUECAT_API_KEY`, `PEXELS_API_KEY`, `UNSPLASH_ACCESS_KEY`, `UNSPLASH_SECRET_KEY`, `PIXABAY_API_KEY`, `COVERR_API_KEY`, `EUROPEANA_API_KEY`, `HARVARD_API_KEY`, `SMITHSONIAN_API_KEY`, `DEBUG_DEV`
 
-Configurer via `./scripts/setup-release.sh` ([geoking-tools](https://github.com/ludoo0d0a/geoking-tools)).
+Configurer via `./scripts/setup-release.sh` ([geoking-tools](https://github.com/ludoo0d0a/geoking-tools)).  
+Le manifest (`project.id`, Play IDs, chemins Gradle) se remplit avec
+`./scripts/project-manifest.sh` — pas dans ce dépôt.
 
 ### Actions minutes épuisés ?
 

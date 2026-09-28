@@ -9,6 +9,9 @@ Full checklist (FR/EN UI labels + API enums):
 
 **→ [geoking-tools/playstore-listing/service-account-permissions.md](https://github.com/ludoo0d0a/geoking-tools/blob/main/playstore-listing/service-account-permissions.md)**
 
+Play / package IDs for the app live in `scripts/project.manifest.json`
+(`./scripts/project-manifest.sh` in [geoking-tools](https://github.com/ludoo0d0a/geoking-tools)).
+
 ### Quick minimum for GeoKing CI
 
 | Need | Permission (FR) |

@@ -8,6 +8,19 @@ with the same pipeline as [`release-play.yml`](../.github/workflows/release-play
 3. `whatsnew` generation  
 4. Play Developer API upload  
 
+## Prerequisites (app repo)
+
+Same stack as CI, wired by **geoking-tools**:
+
+- `scripts/project.manifest.json` — package / Gradle module / Play IDs  
+  (`./scripts/project-manifest.sh validate`)
+- `release.keystore` + `scripts/.keystore-credentials`
+- `scripts/.play-service-account.json` (Play API)
+- `google-services.json` / `local.properties` as for a local release build
+
+Setup once: `./scripts/setup-release.sh`  
+(see [geoking-tools/INTEGRATION.md](https://github.com/ludoo0d0a/geoking-tools/blob/main/INTEGRATION.md)).
+
 ## Script (lives in geoking-tools)
 
 ```bash
@@ -17,12 +30,6 @@ with the same pipeline as [`release-play.yml`](../.github/workflows/release-play
 ./scripts/build-and-publish.sh --skip-tests --dry-run
 ./scripts/build-and-publish.sh --track alpha --skip-review
 ```
-
-Requires (same as CI secrets, already set up by `./scripts/setup-release.sh`):
-
-- `release.keystore` + `scripts/.keystore-credentials`
-- `scripts/.play-service-account.json` (Play API)
-- `google-services.json` / `local.properties` as for a local release build
 
 `versionCode` defaults to `max(Play tracks, playstore/version.properties) + 1`
 (CI uses `github.run_number` instead).
