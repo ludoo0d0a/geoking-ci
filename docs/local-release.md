@@ -31,8 +31,10 @@ Setup once: `./scripts/setup-release.sh`
 ./scripts/build-and-publish.sh --track alpha --skip-review
 ```
 
-`versionCode` defaults to `max(Play tracks, playstore/version.properties) + 1`
-(CI uses `github.run_number` instead).
+`versionCode` defaults to `max(Play tracks, playstore/version.properties) + 1`.
+CI uses `max(github.run_number, playstore/version.properties + 1)` so a local bump
+committed in `version.properties` remains a floor when Actions is relaunched
+([resolve-version-code.sh](../scripts/resolve-version-code.sh)).
 
 Canonical implementation:  
 [geoking-tools/bin/build-and-publish.sh](https://github.com/ludoo0d0a/geoking-tools/blob/main/bin/build-and-publish.sh)

@@ -72,7 +72,7 @@ on:
         type: string
         default: ''
       version_code_override:
-        description: 'VERSION_CODE env for Gradle (empty = github.run_number)'
+        description: 'Force VERSION_CODE (empty = max(run_number, version.properties+1))'
         type: string
         default: ''
       unit_test_tasks:
@@ -98,7 +98,7 @@ jobs:
       PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON || secrets.SERVICE_ACCOUNT_JSON }}
       WEB_CLIENT_ID: ${{ secrets.WEB_CLIENT_ID || secrets.GOOGLE_WEB_CLIENT_ID }}
       GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID || secrets.WEB_CLIENT_ID }}
-      VERSION_CODE: ${{ inputs.version_code_override != '' && inputs.version_code_override || github.run_number }}
+      # VERSION_CODE resolved after checkout (see Resolve VERSION_CODE step).
       VERSION_NAME: ${{ inputs.version_name_override }}
     steps:
       - uses: actions/checkout@v4
@@ -109,6 +109,26 @@ jobs:
           repository: ${{ inputs.geoking_ci_repo }}
           ref: ${{ inputs.geoking_ci_ref }}
           path: geoking-ci
+
+      - name: Resolve VERSION_CODE
+        env:
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          VERSION_CODE_OVERRIDE: ${{ inputs.version_code_override }}
+          GK_PROJECT_ROOT: ${{ github.workspace }}
+        run: |
+          VC="$(bash geoking-ci/scripts/resolve-version-code.sh)"
+          echo "VERSION_CODE=$VC" >> "$GITHUB_ENV"
+          {
+            echo "PROPS_VC=0"
+            if [ -f playstore/version.properties ]; then
+              raw="$(grep '^versionCode=' playstore/version.properties | head -1 | cut -d= -f2- || true)"
+              if [[ "$raw" =~ ^[0-9]+$ ]]; then
+                echo "PROPS_VC=$raw"
+              fi
+            fi
+            echo "RUN_NUMBER=${GITHUB_RUN_NUMBER}"
+          } >> "$GITHUB_ENV"
+          echo "Resolved VERSION_CODE=$VC (run_number=${GITHUB_RUN_NUMBER})"
 
       - name: Checkout geoking-tools
         uses: actions/checkout@v4
@@ -230,6 +250,8 @@ jobs:
             echo "| --- | --- |"
             echo "| Package | \`${{ inputs.package_name }}\` |"
             echo "| versionCode | \`${VERSION_CODE}\` |"
+            echo "| run_number | \`${RUN_NUMBER:-?}\` |"
+            echo "| version.properties | \`${PROPS_VC:-?}\` |"
             echo "| versionName | \`${VN:-?}\` |"
             echo "| Track | \`${TRACK}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
