@@ -32,9 +32,10 @@ Setup once: `./scripts/setup-release.sh`
 ```
 
 `versionCode` defaults to `max(Play tracks, playstore/version.properties) + 1`.
-CI uses `max(github.run_number, playstore/version.properties + 1)` so a local bump
-committed in `version.properties` remains a floor when Actions is relaunched
-([resolve-version-code.sh](../scripts/resolve-version-code.sh)).
+CI uses `max(github.run_number, playstore/version.properties + 1)`, then adds
+`(run_attempt - 1)` so a re-run of the same workflow does not collide on Play
+([resolve-version-code.sh](../scripts/resolve-version-code.sh)). Do **not** compute
+`run_number * 10 + attempt` in caller workflow expressions — GHA has no arithmetic.
 
 Canonical implementation:  
 [geoking-tools/bin/build-and-publish.sh](https://github.com/ludoo0d0a/geoking-tools/blob/main/bin/build-and-publish.sh)

@@ -113,6 +113,7 @@ jobs:
       - name: Resolve VERSION_CODE
         env:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           VERSION_CODE_OVERRIDE: ${{ inputs.version_code_override }}
           GK_PROJECT_ROOT: ${{ github.workspace }}
         run: |
@@ -127,8 +128,9 @@ jobs:
               fi
             fi
             echo "RUN_NUMBER=${GITHUB_RUN_NUMBER}"
+            echo "RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}"
           } >> "$GITHUB_ENV"
-          echo "Resolved VERSION_CODE=$VC (run_number=${GITHUB_RUN_NUMBER})"
+          echo "Resolved VERSION_CODE=$VC (run_number=${GITHUB_RUN_NUMBER} attempt=${GITHUB_RUN_ATTEMPT})"
 
       - name: Checkout geoking-tools
         uses: actions/checkout@v4
