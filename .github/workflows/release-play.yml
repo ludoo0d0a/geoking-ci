@@ -122,6 +122,21 @@ jobs:
           VERSION_CODE_OVERRIDE: ${{ inputs.version_code_override }}
           GK_PROJECT_ROOT: ${{ github.workspace }}
         run: |
+          echo "::group::VERSION_CODE resolution inputs"
+          echo "github.run_number=${GITHUB_RUN_NUMBER}"
+          echo "github.run_attempt=${GITHUB_RUN_ATTEMPT}"
+          echo "github.run_id=${{ github.run_id }}"
+          echo "github.workflow=${{ github.workflow }}"
+          echo "inputs.version_code_override=${VERSION_CODE_OVERRIDE:-<empty>}"
+          echo "GK_PROJECT_ROOT=${GK_PROJECT_ROOT}"
+          if [ -f playstore/version.properties ]; then
+            echo "playstore/version.properties:"
+            cat playstore/version.properties
+          else
+            echo "playstore/version.properties: MISSING"
+          fi
+          echo "::endgroup::"
+
           VC="$(bash geoking-ci/scripts/resolve-version-code.sh)"
           echo "VERSION_CODE=$VC" >> "$GITHUB_ENV"
           {
@@ -135,7 +150,29 @@ jobs:
             echo "RUN_NUMBER=${GITHUB_RUN_NUMBER}"
             echo "RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}"
           } >> "$GITHUB_ENV"
-          echo "Resolved VERSION_CODE=$VC (run_number=${GITHUB_RUN_NUMBER} attempt=${GITHUB_RUN_ATTEMPT})"
+
+          PROPS_VC_LOG=0
+          if [ -f playstore/version.properties ]; then
+            raw="$(grep '^versionCode=' playstore/version.properties | head -1 | cut -d= -f2- || true)"
+            if [[ "$raw" =~ ^[0-9]+$ ]]; then
+              PROPS_VC_LOG="$raw"
+            fi
+          fi
+          FLOOR=$((PROPS_VC_LOG + 1))
+          if [ -n "${VERSION_CODE_OVERRIDE}" ] && [[ "${VERSION_CODE_OVERRIDE}" =~ ^[0-9]+$ ]] && [ "${VERSION_CODE_OVERRIDE}" -gt 0 ]; then
+            ORIGIN="override (${VERSION_CODE_OVERRIDE})"
+          elif [ "$FLOOR" -gt "${GITHUB_RUN_NUMBER}" ]; then
+            ORIGIN="props_floor (version.properties=${PROPS_VC_LOG} + 1 = ${FLOOR} > run_number=${GITHUB_RUN_NUMBER})"
+          else
+            ORIGIN="run_number (${GITHUB_RUN_NUMBER} >= props_floor=${FLOOR})"
+          fi
+          if [ "${GITHUB_RUN_ATTEMPT}" -gt 1 ]; then
+            ORIGIN="${ORIGIN} + attempt_bump=$((GITHUB_RUN_ATTEMPT - 1))"
+          fi
+          echo "Resolved VERSION_CODE=${VC}"
+          echo "ORIGIN=${ORIGIN}"
+          echo "VERSION_CODE_ORIGIN=${ORIGIN}" >> "$GITHUB_ENV"
+          echo "Reminder: after Play accepts ${VC}, bump playstore/version.properties versionCode to ${VC} so the next push does not reuse it."
 
       - name: Checkout geoking-tools
         uses: actions/checkout@v4
@@ -250,6 +287,8 @@ jobs:
           if [ -z "$VN" ] && [ -f playstore/version.properties ]; then
             VN="$(grep '^versionName=' playstore/version.properties | cut -d= -f2-) (from version.properties)"
           fi
+          FLOOR=$(( ${PROPS_VC:-0} + 1 ))
+          ORIGIN="${VERSION_CODE_ORIGIN:-unknown}"
           {
             echo "### Release build"
             echo ""
@@ -257,10 +296,16 @@ jobs:
             echo "| --- | --- |"
             echo "| Package | \`${{ inputs.package_name }}\` |"
             echo "| versionCode | \`${VERSION_CODE}\` |"
+            echo "| origin | \`${ORIGIN}\` |"
             echo "| run_number | \`${RUN_NUMBER:-?}\` |"
+            echo "| run_attempt | \`${RUN_ATTEMPT:-?}\` |"
             echo "| version.properties | \`${PROPS_VC:-?}\` |"
+            echo "| props_floor (props+1) | \`${FLOOR}\` |"
             echo "| versionName | \`${VN:-?}\` |"
             echo "| Track | \`${TRACK}\` |"
+            echo ""
+            echo "Formula: \`max(run_number, version.properties+1) + (run_attempt-1)\` (or override)."
+            echo "After a successful Play upload, bump \`playstore/version.properties\` \`versionCode\` to the uploaded value."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate Play release notes
