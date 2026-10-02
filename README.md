@@ -119,7 +119,7 @@ désactiver ce comportement.
 | `package_name` | *(requis)* | `applicationId` Play (= `project.package` du manifest) |
 | `gradle_module` | `:composeApp` | Module Gradle |
 | `bundle_task` | `bundleRelease` | Task Gradle (`bundlePlaystoreRelease` pour flavors) |
-| `version_code_override` | `max(run_number, version.properties+1)` | Force `VERSION_CODE` (ex. schéma Gaston `run*10+attempt`) |
+| `version_code_override` | `max(run_number, props+1, Play+1)` | Force `VERSION_CODE` (rare; leave empty) |
 | `java_version` | `21` | Version JDK |
 
 ## Landing page (Cloudflare Pages + screenshots)

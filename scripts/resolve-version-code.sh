@@ -4,20 +4,20 @@
 # Usage:
 #   resolve-version-code.sh [override]
 #   VERSION_CODE_OVERRIDE=42 resolve-version-code.sh
+#   PLAY_LATEST_VERSION_CODE=5040 resolve-version-code.sh
 #
 # Prints a single integer to stdout:
 #   - If override (arg1 or VERSION_CODE_OVERRIDE) is a positive int → that value
-#   - Else max(GITHUB_RUN_NUMBER, playstore/version.properties versionCode + 1)
+#   - Else max(GITHUB_RUN_NUMBER, playstore/version.properties+1, PLAY_LATEST+1)
 #     plus (GITHUB_RUN_ATTEMPT - 1) so workflow re-runs do not collide on Play
 #
-# Semantics: version.properties versionCode is the last locally published / bumped
-# floor. CI must never reuse it, so the floor contribution is props+1.
+# PLAY_LATEST_VERSION_CODE is the highest versionCode already known to Play
+# (tracks + uploaded bundles). Callers should query Play before invoking this
+# script so CI does not depend on manually bumping version.properties after
+# every successful upload. version.properties remains a local/offline floor.
+#
 # Callers must not invent arithmetic in workflow expressions (GHA has no +/*);
 # pass version_code_override only for rare forced codes, otherwise leave empty.
-#
-# After a successful Play upload of code N, bump playstore/version.properties to N
-# (or higher). Otherwise the next run keeps resolving to N again when run_number
-# is still below the Play floor.
 set -euo pipefail
 
 ROOT="${GK_PROJECT_ROOT:-${GITHUB_WORKSPACE:-.}}"
@@ -25,6 +25,7 @@ PROPS="$ROOT/playstore/version.properties"
 RUN_NUMBER="${GITHUB_RUN_NUMBER:-0}"
 RUN_ATTEMPT="${GITHUB_RUN_ATTEMPT:-1}"
 OVERRIDE="${1:-${VERSION_CODE_OVERRIDE:-}}"
+PLAY_LATEST="${PLAY_LATEST_VERSION_CODE:-}"
 
 log() { echo "resolve-version-code: $*" >&2; }
 
@@ -34,6 +35,7 @@ log "props_path=${PROPS}"
 log "props_exists=$([ -f "$PROPS" ] && echo yes || echo no)"
 log "GITHUB_RUN_NUMBER(raw)=${GITHUB_RUN_NUMBER:-<unset>}"
 log "GITHUB_RUN_ATTEMPT(raw)=${GITHUB_RUN_ATTEMPT:-<unset>}"
+log "PLAY_LATEST_VERSION_CODE(raw)=${PLAY_LATEST:-<unset>}"
 log "VERSION_CODE_OVERRIDE(env)=${VERSION_CODE_OVERRIDE:-<empty>}"
 log "override(arg1)=${1:-<none>}"
 
@@ -72,12 +74,27 @@ if [ -f "$PROPS" ]; then
   fi
 fi
 
-floor=$((props_vc + 1))
+props_floor=$((props_vc + 1))
+
+play_floor=0
+play_raw="<unset>"
+if [[ "${PLAY_LATEST}" =~ ^[0-9]+$ ]]; then
+  play_raw="$PLAY_LATEST"
+  play_floor=$((PLAY_LATEST + 1))
+elif [ -n "${PLAY_LATEST}" ]; then
+  log "play_latest_invalid=${PLAY_LATEST} → ignoring"
+  play_raw="<invalid:${PLAY_LATEST}>"
+fi
+
 base="$RUN_NUMBER"
 base_source="run_number"
-if [ "$floor" -gt "$base" ]; then
-  base="$floor"
+if [ "$props_floor" -gt "$base" ]; then
+  base="$props_floor"
   base_source="props_floor (version.properties versionCode + 1)"
+fi
+if [ "$play_floor" -gt "$base" ]; then
+  base="$play_floor"
+  base_source="play_floor (Play latest versionCode + 1)"
 fi
 
 attempt_bump=0
@@ -88,16 +105,18 @@ if [ "$RUN_ATTEMPT" -gt 1 ]; then
 fi
 
 log "props_versionCode=${props_vc} (raw=${props_raw})"
-log "props_floor=${floor}  (= props_versionCode + 1)"
+log "props_floor=${props_floor}  (= props_versionCode + 1)"
+log "play_latest=${play_raw}"
+log "play_floor=${play_floor}  (= play_latest + 1, or 0 if unset)"
 log "run_number=${RUN_NUMBER}"
 log "run_attempt=${RUN_ATTEMPT}"
 log "base=${base}  (winner=${base_source})"
 log "attempt_bump=${attempt_bump}  (= max(0, run_attempt - 1))"
-log "formula=max(run_number, props_floor) + attempt_bump"
+log "formula=max(run_number, props_floor, play_floor) + attempt_bump"
 log "source=${base_source}$([ "$attempt_bump" -gt 0 ] && echo " + attempt_bump" || true)"
 log "resolved=${resolved}"
-if [ "$base_source" != "run_number" ] && [ "$RUN_NUMBER" -lt "$floor" ]; then
-  log "note=run_number (${RUN_NUMBER}) < props_floor (${floor}); Play floor dominates until version.properties is bumped after each successful upload"
+if [ "$play_floor" -eq 0 ]; then
+  log "note=PLAY_LATEST_VERSION_CODE unset; relying on run_number / version.properties only (manual props bumps still needed if props lag Play)"
 fi
 log "────────────────────────"
 

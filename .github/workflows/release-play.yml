@@ -72,7 +72,7 @@ on:
         type: string
         default: ''
       version_code_override:
-        description: 'Force VERSION_CODE (empty = max(run_number, version.properties+1))'
+        description: 'Force VERSION_CODE (empty = max(run_number, version.properties+1, Play+1))'
         type: string
         default: ''
       unit_test_tasks:
@@ -115,19 +115,29 @@ jobs:
           ref: ${{ inputs.geoking_ci_ref }}
           path: geoking-ci
 
+      - name: Checkout geoking-tools
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.geoking_tools_repo }}
+          ref: ${{ inputs.geoking_tools_ref }}
+          path: geoking-tools
+
       - name: Resolve VERSION_CODE
         env:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           VERSION_CODE_OVERRIDE: ${{ inputs.version_code_override }}
           GK_PROJECT_ROOT: ${{ github.workspace }}
+          PACKAGE_NAME: ${{ inputs.package_name }}
         run: |
+          set -euo pipefail
           echo "::group::VERSION_CODE resolution inputs"
           echo "github.run_number=${GITHUB_RUN_NUMBER}"
           echo "github.run_attempt=${GITHUB_RUN_ATTEMPT}"
           echo "github.run_id=${{ github.run_id }}"
           echo "github.workflow=${{ github.workflow }}"
           echo "inputs.version_code_override=${VERSION_CODE_OVERRIDE:-<empty>}"
+          echo "package_name=${PACKAGE_NAME}"
           echo "GK_PROJECT_ROOT=${GK_PROJECT_ROOT}"
           if [ -f playstore/version.properties ]; then
             echo "playstore/version.properties:"
@@ -137,6 +147,37 @@ jobs:
           fi
           echo "::endgroup::"
 
+          PLAY_LATEST=""
+          if [ -z "${VERSION_CODE_OVERRIDE:-}" ]; then
+            echo "::group::Query Play for latest versionCode"
+            if [ -z "${PLAY_SERVICE_ACCOUNT_JSON:-}" ]; then
+              echo "::warning::PLAY_SERVICE_ACCOUNT_JSON / SERVICE_ACCOUNT_JSON missing — cannot query Play floor"
+            else
+              SA_FILE="${RUNNER_TEMP}/play-sa-resolve.json"
+              printf '%s\n' "$PLAY_SERVICE_ACCOUNT_JSON" > "$SA_FILE"
+              # shellcheck source=/dev/null
+              . geoking-tools/lib/ui.sh
+              # shellcheck source=/dev/null
+              . geoking-tools/lib/play-api.sh
+              export APP_ID="$PACKAGE_NAME"
+              export ROOT="$GK_PROJECT_ROOT"
+              need jq openssl curl
+              if TOKEN="$(gk_google_sa_access_token "$SA_FILE")"; then
+                if PLAY_LATEST="$(gk_play_latest_version_code "$TOKEN")"; then
+                  echo "Play latest versionCode=${PLAY_LATEST}"
+                else
+                  echo "::warning::Play latest versionCode unavailable (no releases yet?); falling back to run_number / version.properties"
+                  PLAY_LATEST=""
+                fi
+              else
+                echo "::warning::Could not obtain Play API token; falling back to run_number / version.properties"
+              fi
+              rm -f "$SA_FILE"
+            fi
+            echo "::endgroup::"
+          fi
+
+          export PLAY_LATEST_VERSION_CODE="${PLAY_LATEST}"
           VC="$(bash geoking-ci/scripts/resolve-version-code.sh)"
           echo "VERSION_CODE=$VC" >> "$GITHUB_ENV"
           {
@@ -147,6 +188,7 @@ jobs:
                 echo "PROPS_VC=$raw"
               fi
             fi
+            echo "PLAY_LATEST_VC=${PLAY_LATEST:-}"
             echo "RUN_NUMBER=${GITHUB_RUN_NUMBER}"
             echo "RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT}"
           } >> "$GITHUB_ENV"
@@ -158,13 +200,19 @@ jobs:
               PROPS_VC_LOG="$raw"
             fi
           fi
-          FLOOR=$((PROPS_VC_LOG + 1))
+          PROPS_FLOOR=$((PROPS_VC_LOG + 1))
+          PLAY_FLOOR=0
+          if [[ "${PLAY_LATEST}" =~ ^[0-9]+$ ]]; then
+            PLAY_FLOOR=$((PLAY_LATEST + 1))
+          fi
           if [ -n "${VERSION_CODE_OVERRIDE}" ] && [[ "${VERSION_CODE_OVERRIDE}" =~ ^[0-9]+$ ]] && [ "${VERSION_CODE_OVERRIDE}" -gt 0 ]; then
             ORIGIN="override (${VERSION_CODE_OVERRIDE})"
-          elif [ "$FLOOR" -gt "${GITHUB_RUN_NUMBER}" ]; then
-            ORIGIN="props_floor (version.properties=${PROPS_VC_LOG} + 1 = ${FLOOR} > run_number=${GITHUB_RUN_NUMBER})"
+          elif [ "$PLAY_FLOOR" -gt "$PROPS_FLOOR" ] && [ "$PLAY_FLOOR" -gt "${GITHUB_RUN_NUMBER}" ]; then
+            ORIGIN="play_floor (Play=${PLAY_LATEST} + 1 = ${PLAY_FLOOR})"
+          elif [ "$PROPS_FLOOR" -gt "${GITHUB_RUN_NUMBER}" ]; then
+            ORIGIN="props_floor (version.properties=${PROPS_VC_LOG} + 1 = ${PROPS_FLOOR} > run_number=${GITHUB_RUN_NUMBER})"
           else
-            ORIGIN="run_number (${GITHUB_RUN_NUMBER} >= props_floor=${FLOOR})"
+            ORIGIN="run_number (${GITHUB_RUN_NUMBER})"
           fi
           if [ "${GITHUB_RUN_ATTEMPT}" -gt 1 ]; then
             ORIGIN="${ORIGIN} + attempt_bump=$((GITHUB_RUN_ATTEMPT - 1))"
@@ -172,14 +220,6 @@ jobs:
           echo "Resolved VERSION_CODE=${VC}"
           echo "ORIGIN=${ORIGIN}"
           echo "VERSION_CODE_ORIGIN=${ORIGIN}" >> "$GITHUB_ENV"
-          echo "Reminder: after Play accepts ${VC}, bump playstore/version.properties versionCode to ${VC} so the next push does not reuse it."
-
-      - name: Checkout geoking-tools
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.geoking_tools_repo }}
-          ref: ${{ inputs.geoking_tools_ref }}
-          path: geoking-tools
 
       - name: Setup Gradle
         uses: ./geoking-ci/actions/setup-gradle
@@ -287,7 +327,11 @@ jobs:
           if [ -z "$VN" ] && [ -f playstore/version.properties ]; then
             VN="$(grep '^versionName=' playstore/version.properties | cut -d= -f2-) (from version.properties)"
           fi
-          FLOOR=$(( ${PROPS_VC:-0} + 1 ))
+          PROPS_FLOOR=$(( ${PROPS_VC:-0} + 1 ))
+          PLAY_FLOOR=0
+          if [[ "${PLAY_LATEST_VC:-}" =~ ^[0-9]+$ ]]; then
+            PLAY_FLOOR=$((PLAY_LATEST_VC + 1))
+          fi
           ORIGIN="${VERSION_CODE_ORIGIN:-unknown}"
           {
             echo "### Release build"
@@ -300,12 +344,14 @@ jobs:
             echo "| run_number | \`${RUN_NUMBER:-?}\` |"
             echo "| run_attempt | \`${RUN_ATTEMPT:-?}\` |"
             echo "| version.properties | \`${PROPS_VC:-?}\` |"
-            echo "| props_floor (props+1) | \`${FLOOR}\` |"
+            echo "| props_floor (props+1) | \`${PROPS_FLOOR}\` |"
+            echo "| Play latest | \`${PLAY_LATEST_VC:-n/a}\` |"
+            echo "| play_floor (Play+1) | \`${PLAY_FLOOR}\` |"
             echo "| versionName | \`${VN:-?}\` |"
             echo "| Track | \`${TRACK}\` |"
             echo ""
-            echo "Formula: \`max(run_number, version.properties+1) + (run_attempt-1)\` (or override)."
-            echo "After a successful Play upload, bump \`playstore/version.properties\` \`versionCode\` to the uploaded value."
+            echo "Formula: \`max(run_number, version.properties+1, Play+1) + (run_attempt-1)\` (or override)."
+            echo "Play is the source of truth — no need to bump \`playstore/version.properties\` after each CI upload."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate Play release notes

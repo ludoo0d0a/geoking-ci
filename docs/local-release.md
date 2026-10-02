@@ -31,11 +31,13 @@ Setup once: `./scripts/setup-release.sh`
 ./scripts/build-and-publish.sh --track alpha --skip-review
 ```
 
-`versionCode` defaults to `max(Play tracks, playstore/version.properties) + 1`.
-CI uses `max(github.run_number, playstore/version.properties + 1)`, then adds
-`(run_attempt - 1)` so a re-run of the same workflow does not collide on Play
+`versionCode` defaults to `max(Play tracks/bundles, playstore/version.properties) + 1`.
+CI uses the same Play floor plus `max(github.run_number, version.properties + 1)`,
+then adds `(run_attempt - 1)` so a re-run of the same workflow does not collide
 ([resolve-version-code.sh](../scripts/resolve-version-code.sh)). Do **not** compute
 `run_number * 10 + attempt` in caller workflow expressions — GHA has no arithmetic.
+Manual bumps of `playstore/version.properties` after CI uploads are optional (local
+floor only); Play is the source of truth in CI.
 
 Canonical implementation:  
 [geoking-tools/bin/build-and-publish.sh](https://github.com/ludoo0d0a/geoking-tools/blob/main/bin/build-and-publish.sh)
