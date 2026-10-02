@@ -86,6 +86,11 @@ on:
         type: boolean
         default: false
 
+# allowOneBuildAtOnce / cancelPreviousRunningBuild: one Play release per repo; newer cancels older.
+concurrency:
+  group: play-release-${{ github.repository }}
+  cancel-in-progress: true
+
 jobs:
   release:
     runs-on: ubuntu-latest

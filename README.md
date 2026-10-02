@@ -85,6 +85,23 @@ jobs:
 Si le module n’est pas `:composeApp`, passer aussi `gradle_module`, `apk_glob`,
 `aab_glob` (mêmes valeurs que `build.*` dans `scripts/project.manifest.json`).
 
+## Concurrency (allowOneBuildAtOnce)
+
+Tous les workflows réutilisables appliquent **cancelPreviousRunningBuild** via
+`concurrency` + `cancel-in-progress: true` (un seul run à la fois ; le nouveau
+annule l’ancien) :
+
+| Workflow | Groupe |
+|---|---|
+| `android-ci.yml` | `android-ci-${{ github.repository }}-${{ github.ref }}` |
+| `release-play.yml` | `play-release-${{ github.repository }}` |
+| `cloudflare-pages.yml` | `cloudflare-pages-${{ github.repository }}-${{ github.ref }}` |
+| `website-screenshots.yml` | `website-screenshots-${{ github.repository }}` |
+
+Les templates app (`geoking-tools`) gardent aussi un `concurrency` côté caller
+pour annuler **tout** le workflow appelant (jobs locaux + `uses:`). Ne pas
+désactiver ce comportement.
+
 ## Inputs des workflows réutilisables
 
 ### `android-ci.yml`

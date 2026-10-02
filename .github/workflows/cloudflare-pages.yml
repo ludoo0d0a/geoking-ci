@@ -21,6 +21,11 @@ on:
       CLOUDFLARE_ACCOUNT_ID:
         required: true
 
+# allowOneBuildAtOnce / cancelPreviousRunningBuild: one deploy per repo+ref; newer cancels older.
+concurrency:
+  group: cloudflare-pages-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

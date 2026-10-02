@@ -48,6 +48,11 @@ on:
         type: string
         default: '21'
 
+# allowOneBuildAtOnce / cancelPreviousRunningBuild: one run per repo+ref; newer cancels older.
+concurrency:
+  group: android-ci-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest

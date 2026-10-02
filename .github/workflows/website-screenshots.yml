@@ -48,6 +48,11 @@ on:
         type: string
         default: '21'
 
+# allowOneBuildAtOnce / cancelPreviousRunningBuild: one screenshots run per repo; newer cancels older.
+concurrency:
+  group: website-screenshots-${{ github.repository }}
+  cancel-in-progress: true
+
 jobs:
   screenshots:
     runs-on: ubuntu-latest
