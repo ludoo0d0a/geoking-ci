@@ -1,113 +1,92 @@
-name: Release to Play Store (reusable)
+name: 'GeoKing Release to Play'
+description: >-
+  Unit tests → signed AAB → Play upload. Reads signing/Play/Firebase/API keys
+  from the caller job env only (no secrets context).
 
-on:
-  workflow_call:
-    inputs:
-      package_name:
-        description: 'Android applicationId / Play package name'
-        type: string
-        required: true
-      gradle_module:
-        description: 'Gradle module path (e.g. :composeApp)'
-        type: string
-        default: ':composeApp'
-      bundle_task:
-        description: 'Gradle bundle task name (e.g. bundleRelease or bundlePlaystoreRelease)'
-        type: string
-        default: 'bundleRelease'
-      aab_glob:
-        description: 'AAB path glob relative to repo root'
-        type: string
-        default: 'composeApp/build/outputs/bundle/release/composeApp-release.aab'
-      google_services_path:
-        description: 'Path to decode google-services.json into'
-        type: string
-        default: 'composeApp/google-services.json'
-      whatsnew_script:
-        description: 'Path to whatsnew.py (project wrapper or geoking-tools)'
-        type: string
-        default: 'scripts/whatsnew.py'
-      default_track:
-        description: 'Default Play track when not dispatching'
-        type: string
-        default: 'internal'
-      geoking_ci_repo:
-        description: 'geoking-ci repository (owner/name)'
-        type: string
-        default: 'ludoo0d0a/geoking-ci'
-      geoking_ci_ref:
-        description: 'geoking-ci ref'
-        type: string
-        default: 'main'
-      geoking_tools_repo:
-        description: 'geoking-tools repository (owner/name) for whatsnew.py'
-        type: string
-        default: 'ludoo0d0a/geoking-tools'
-      geoking_tools_ref:
-        description: 'geoking-tools ref'
-        type: string
-        default: 'main'
-      gradle_version:
-        description: 'Gradle version (wrapper = project gradle-wrapper.properties)'
-        type: string
-        default: 'wrapper'
-      java_version:
-        description: 'JDK version'
-        type: string
-        default: '21'
-      workflow_dispatch_track:
-        description: 'Track from workflow_dispatch (empty if push/tag)'
-        type: string
-        default: ''
-      workflow_dispatch_skip_review:
-        description: 'changesNotSentForReview from workflow_dispatch'
-        type: string
-        default: 'false'
-      is_workflow_dispatch:
-        description: 'Whether the caller run was workflow_dispatch'
-        type: string
-        default: 'false'
-      version_name_override:
-        description: 'VERSION_NAME env for Gradle (empty = playstore/version.properties)'
-        type: string
-        default: ''
-      version_code_override:
-        description: 'Force VERSION_CODE (empty = max(run_number, version.properties+1, Play+1))'
-        type: string
-        default: ''
-      unit_test_tasks:
-        description: >-
-          Space-separated Gradle unit-test tasks. Empty = ${gradle_module}:testDebugUnitTest.
-          Set skip_unit_tests=true to skip entirely.
-        type: string
-        default: ''
-      skip_unit_tests:
-        description: 'Skip unit tests (build + Play only)'
-        type: boolean
-        default: false
+inputs:
+  package_name:
+    description: 'Android applicationId / Play package name'
+    required: true
+  gradle_module:
+    description: 'Gradle module path (e.g. :composeApp)'
+    required: false
+    default: ':composeApp'
+  bundle_task:
+    description: 'Gradle bundle task name'
+    required: false
+    default: 'bundleRelease'
+  aab_glob:
+    description: 'AAB path glob relative to repo root'
+    required: false
+    default: 'composeApp/build/outputs/bundle/release/composeApp-release.aab'
+  google_services_path:
+    description: 'Path to decode google-services.json into'
+    required: false
+    default: 'composeApp/google-services.json'
+  whatsnew_script:
+    description: 'Path to whatsnew.py'
+    required: false
+    default: 'scripts/whatsnew.py'
+  default_track:
+    description: 'Default Play track when not dispatching'
+    required: false
+    default: 'internal'
+  geoking_ci_repo:
+    description: 'geoking-ci repository (owner/name)'
+    required: false
+    default: 'ludoo0d0a/geoking-ci'
+  geoking_ci_ref:
+    description: 'geoking-ci ref'
+    required: false
+    default: 'main'
+  geoking_tools_repo:
+    description: 'geoking-tools repository (owner/name)'
+    required: false
+    default: 'ludoo0d0a/geoking-tools'
+  geoking_tools_ref:
+    description: 'geoking-tools ref'
+    required: false
+    default: 'main'
+  gradle_version:
+    description: 'Gradle version (wrapper = project gradle-wrapper.properties)'
+    required: false
+    default: 'wrapper'
+  java_version:
+    description: 'JDK version'
+    required: false
+    default: '21'
+  workflow_dispatch_track:
+    description: 'Track from workflow_dispatch (empty if push/tag)'
+    required: false
+    default: ''
+  workflow_dispatch_skip_review:
+    description: 'changesNotSentForReview from workflow_dispatch'
+    required: false
+    default: 'false'
+  is_workflow_dispatch:
+    description: 'Whether the caller run was workflow_dispatch'
+    required: false
+    default: 'false'
+  version_name_override:
+    description: 'VERSION_NAME env for Gradle (empty = playstore/version.properties)'
+    required: false
+    default: ''
+  version_code_override:
+    description: 'Force VERSION_CODE (empty = resolve script)'
+    required: false
+    default: ''
+  unit_test_tasks:
+    description: 'Space-separated Gradle unit-test tasks. Empty = ${gradle_module}:testDebugUnitTest'
+    required: false
+    default: ''
+  skip_unit_tests:
+    description: 'Skip unit tests (true/false)'
+    required: false
+    default: 'false'
 
-# allowOneBuildAtOnce / cancelPreviousRunningBuild: one Play release per repo; newer cancels older.
-concurrency:
-  group: play-release-${{ github.repository }}
-  cancel-in-progress: true
-
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    env:
-      # Canonical geoking names, with legacy Gaston aliases.
-      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 || secrets.SIGNING_KEY }}
-      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || secrets.KEY_STORE_PASSWORD }}
-      KEY_ALIAS: ${{ secrets.KEY_ALIAS || secrets.ALIAS }}
-      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON || secrets.SERVICE_ACCOUNT_JSON }}
-      WEB_CLIENT_ID: ${{ secrets.WEB_CLIENT_ID || secrets.GOOGLE_WEB_CLIENT_ID }}
-      GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID || secrets.WEB_CLIENT_ID }}
-      # VERSION_CODE resolved after checkout (see Resolve VERSION_CODE step).
-      VERSION_NAME: ${{ inputs.version_name_override }}
-    steps:
-      - uses: actions/checkout@v4
-
+runs:
+  using: 'composite'
+  steps:
       - name: Checkout geoking-ci
         uses: actions/checkout@v4
         with:
@@ -122,7 +101,15 @@ jobs:
           ref: ${{ inputs.geoking_tools_ref }}
           path: geoking-tools
 
+      - name: Export VERSION_NAME from input
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.version_name_override }}" ]; then
+            echo "VERSION_NAME=${{ inputs.version_name_override }}" >> "$GITHUB_ENV"
+          fi
+
       - name: Resolve VERSION_CODE
+        shell: bash
         env:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
@@ -151,7 +138,7 @@ jobs:
           if [ -z "${VERSION_CODE_OVERRIDE:-}" ]; then
             echo "::group::Query Play for latest versionCode"
             if [ -z "${PLAY_SERVICE_ACCOUNT_JSON:-}" ]; then
-              echo "::warning::PLAY_SERVICE_ACCOUNT_JSON / SERVICE_ACCOUNT_JSON missing — cannot query Play floor"
+              echo "::warning::PLAY_SERVICE_ACCOUNT_JSON missing — cannot query Play floor"
             else
               SA_FILE="${RUNNER_TEMP}/play-sa-resolve.json"
               printf '%s\n' "$PLAY_SERVICE_ACCOUNT_JSON" > "$SA_FILE"
@@ -222,47 +209,22 @@ jobs:
           echo "VERSION_CODE_ORIGIN=${ORIGIN}" >> "$GITHUB_ENV"
 
       - name: Setup Gradle
-        uses: ./geoking-ci/actions/setup-gradle
+        uses: ./geoking-ci/actions/gk-setup-gradle
         with:
           gradle-version: ${{ inputs.gradle_version }}
           java-version: ${{ inputs.java_version }}
 
+      # Expects GOOGLE_SERVICES_JSON in the caller job env.
       - name: Decode google-services.json (Firebase)
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        shell: bash
         run: bash geoking-ci/scripts/write-google-services.sh "${{ inputs.google_services_path }}"
 
+      # Project API keys must already be in the caller job env.
       - name: Unit tests
-        if: ${{ inputs.skip_unit_tests != true }}
+        if: ${{ inputs.skip_unit_tests != 'true' }}
+        shell: bash
         env:
           GK_TOOLS: ${{ github.workspace }}/geoking-tools
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
-          UNSPLASH_SECRET_KEY: ${{ secrets.UNSPLASH_SECRET_KEY }}
-          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-          COVERR_API_KEY: ${{ secrets.COVERR_API_KEY }}
-          EUROPEANA_API_KEY: ${{ secrets.EUROPEANA_API_KEY }}
-          HARVARD_API_KEY: ${{ secrets.HARVARD_API_KEY }}
-          SMITHSONIAN_API_KEY: ${{ secrets.SMITHSONIAN_API_KEY }}
-          DEBUG_DEV: ${{ secrets.DEBUG_DEV }}
-          GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
-          OPENCHARGEMAP_KEY: ${{ secrets.OPENCHARGEMAP_KEY }}
-          LUFOP_API_KEY: ${{ secrets.LUFOP_API_KEY }}
-          MOBILITEIT_LUXEMBOURG_KEY: ${{ secrets.MOBILITEIT_LUXEMBOURG_KEY }}
-          TOMTOM_KEY: ${{ secrets.TOMTOM_KEY }}
-          CHARGY_API_KEY: ${{ secrets.CHARGY_API_KEY }}
-          GERMANY_TANKERKOENIG_KEY: ${{ secrets.GERMANY_TANKERKOENIG_KEY }}
-          FASTNED_UK_KEY: ${{ secrets.FASTNED_UK_KEY }}
-          ROMANIA_PECO_APPLICATION_ID: ${{ secrets.ROMANIA_PECO_APPLICATION_ID }}
-          ROMANIA_PECO_CLIENT_KEY: ${{ secrets.ROMANIA_PECO_CLIENT_KEY }}
-          DKV_SUBSCRIPTION_KEY: ${{ secrets.DKV_SUBSCRIPTION_KEY }}
-          DKV_AUTHORIZATION: ${{ secrets.DKV_AUTHORIZATION }}
-          ECO_MOVEMENT_KEY: ${{ secrets.ECO_MOVEMENT_KEY }}
-          FUELPRICES_DK_KEY: ${{ secrets.FUELPRICES_DK_KEY }}
-          NSW_FUELCHECK_KEY: ${{ secrets.NSW_FUELCHECK_KEY }}
-          NSW_FUELCHECK_SECRET: ${{ secrets.NSW_FUELCHECK_SECRET }}
         run: |
           TASKS="${{ inputs.unit_test_tasks }}"
           if [ -z "$TASKS" ]; then
@@ -272,12 +234,14 @@ jobs:
           ./gradlew $TASKS --no-daemon --stacktrace
 
       - name: Decode signing keystore
+        shell: bash
         run: |
-          [ -n "$KEYSTORE_BASE64" ] || { echo "::error::KEYSTORE_BASE64 / SIGNING_KEY secret missing"; exit 1; }
+          [ -n "${KEYSTORE_BASE64:-}" ] || { echo "::error::KEYSTORE_BASE64 env missing (map secrets in the app workflow)"; exit 1; }
           echo "$KEYSTORE_BASE64" | tr -d '\n' | base64 --decode > "$RUNNER_TEMP/release.keystore"
           [ -s "$RUNNER_TEMP/release.keystore" ] || { echo "::error::Keystore decode produced empty file"; exit 1; }
 
       - name: Print upload-key SHA-1 (OAuth Android client)
+        shell: bash
         env:
           KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
         run: |
@@ -286,42 +250,17 @@ jobs:
           echo "Upload-key SHA-1 (add to OAuth Android client if missing): $SHA1"
 
       - name: Build signed AAB
+        shell: bash
         env:
           GK_TOOLS: ${{ github.workspace }}/geoking-tools
           KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
-          UNSPLASH_SECRET_KEY: ${{ secrets.UNSPLASH_SECRET_KEY }}
-          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-          COVERR_API_KEY: ${{ secrets.COVERR_API_KEY }}
-          EUROPEANA_API_KEY: ${{ secrets.EUROPEANA_API_KEY }}
-          HARVARD_API_KEY: ${{ secrets.HARVARD_API_KEY }}
-          SMITHSONIAN_API_KEY: ${{ secrets.SMITHSONIAN_API_KEY }}
-          DEBUG_DEV: ${{ secrets.DEBUG_DEV }}
-          GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
-          OPENCHARGEMAP_KEY: ${{ secrets.OPENCHARGEMAP_KEY }}
-          LUFOP_API_KEY: ${{ secrets.LUFOP_API_KEY }}
-          MOBILITEIT_LUXEMBOURG_KEY: ${{ secrets.MOBILITEIT_LUXEMBOURG_KEY }}
-          TOMTOM_KEY: ${{ secrets.TOMTOM_KEY }}
-          CHARGY_API_KEY: ${{ secrets.CHARGY_API_KEY }}
-          GERMANY_TANKERKOENIG_KEY: ${{ secrets.GERMANY_TANKERKOENIG_KEY }}
-          FASTNED_UK_KEY: ${{ secrets.FASTNED_UK_KEY }}
-          ROMANIA_PECO_APPLICATION_ID: ${{ secrets.ROMANIA_PECO_APPLICATION_ID }}
-          ROMANIA_PECO_CLIENT_KEY: ${{ secrets.ROMANIA_PECO_CLIENT_KEY }}
-          DKV_SUBSCRIPTION_KEY: ${{ secrets.DKV_SUBSCRIPTION_KEY }}
-          DKV_AUTHORIZATION: ${{ secrets.DKV_AUTHORIZATION }}
-          ECO_MOVEMENT_KEY: ${{ secrets.ECO_MOVEMENT_KEY }}
-          FUELPRICES_DK_KEY: ${{ secrets.FUELPRICES_DK_KEY }}
-          NSW_FUELCHECK_KEY: ${{ secrets.NSW_FUELCHECK_KEY }}
-          NSW_FUELCHECK_SECRET: ${{ secrets.NSW_FUELCHECK_SECRET }}
         run: |
           echo "Building versionCode=${VERSION_CODE} versionName=${VERSION_NAME:-(from version.properties)}"
           ./gradlew ${{ inputs.gradle_module }}:${{ inputs.bundle_task }} --no-daemon --stacktrace
 
       - name: Build summary
         if: always()
+        shell: bash
         env:
           TRACK: ${{ inputs.workflow_dispatch_track || inputs.default_track }}
         run: |
@@ -357,6 +296,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate Play release notes
+        shell: bash
         env:
           GK_PROJECT_ROOT: ${{ github.workspace }}
           GK_TOOLS: ${{ github.workspace }}/geoking-tools

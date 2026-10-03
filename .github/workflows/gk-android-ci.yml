@@ -74,48 +74,19 @@ jobs:
           path: geoking-tools
 
       - name: Setup Gradle
-        uses: ./geoking-ci/actions/setup-gradle
+        uses: ./geoking-ci/actions/gk-setup-gradle
         with:
           gradle-version: ${{ inputs.gradle_version }}
           java-version: ${{ inputs.java_version }}
 
+      # Expects GOOGLE_SERVICES_JSON in the job/workflow env (set by the caller app).
       - name: Decode google-services.json (Firebase)
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: bash geoking-ci/scripts/write-google-services.sh "${{ inputs.google_services_path }}"
 
+      # Project API keys / secrets must be exported by the caller app env — not here.
       - name: Assemble debug APK
         env:
           GK_TOOLS: ${{ github.workspace }}/geoking-tools
-          WEB_CLIENT_ID: ${{ secrets.WEB_CLIENT_ID || secrets.GOOGLE_WEB_CLIENT_ID }}
-          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID || secrets.WEB_CLIENT_ID }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          REVENUECAT_API_KEY: ${{ secrets.REVENUECAT_API_KEY }}
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
-          UNSPLASH_SECRET_KEY: ${{ secrets.UNSPLASH_SECRET_KEY }}
-          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-          COVERR_API_KEY: ${{ secrets.COVERR_API_KEY }}
-          EUROPEANA_API_KEY: ${{ secrets.EUROPEANA_API_KEY }}
-          HARVARD_API_KEY: ${{ secrets.HARVARD_API_KEY }}
-          SMITHSONIAN_API_KEY: ${{ secrets.SMITHSONIAN_API_KEY }}
-          DEBUG_DEV: ${{ secrets.DEBUG_DEV }}
-          GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
-          OPENCHARGEMAP_KEY: ${{ secrets.OPENCHARGEMAP_KEY }}
-          LUFOP_API_KEY: ${{ secrets.LUFOP_API_KEY }}
-          MOBILITEIT_LUXEMBOURG_KEY: ${{ secrets.MOBILITEIT_LUXEMBOURG_KEY }}
-          TOMTOM_KEY: ${{ secrets.TOMTOM_KEY }}
-          CHARGY_API_KEY: ${{ secrets.CHARGY_API_KEY }}
-          GERMANY_TANKERKOENIG_KEY: ${{ secrets.GERMANY_TANKERKOENIG_KEY }}
-          FASTNED_UK_KEY: ${{ secrets.FASTNED_UK_KEY }}
-          ROMANIA_PECO_APPLICATION_ID: ${{ secrets.ROMANIA_PECO_APPLICATION_ID }}
-          ROMANIA_PECO_CLIENT_KEY: ${{ secrets.ROMANIA_PECO_CLIENT_KEY }}
-          DKV_SUBSCRIPTION_KEY: ${{ secrets.DKV_SUBSCRIPTION_KEY }}
-          DKV_AUTHORIZATION: ${{ secrets.DKV_AUTHORIZATION }}
-          ECO_MOVEMENT_KEY: ${{ secrets.ECO_MOVEMENT_KEY }}
-          FUELPRICES_DK_KEY: ${{ secrets.FUELPRICES_DK_KEY }}
-          NSW_FUELCHECK_KEY: ${{ secrets.NSW_FUELCHECK_KEY }}
-          NSW_FUELCHECK_SECRET: ${{ secrets.NSW_FUELCHECK_SECRET }}
         run: ./gradlew ${{ inputs.gradle_module }}:assemble${{ inputs.assemble_task }} --no-daemon --stacktrace
 
       - name: Upload debug APK

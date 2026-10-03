@@ -1,7 +1,7 @@
 # Local Play release (CI fallback)
 
 When GitHub Actions minutes/credits are exhausted, publish from a developer machine
-with the same pipeline as [`release-play.yml`](../.github/workflows/release-play.yml):
+with the same pipeline as [`actions/gk-release-play`](../actions/gk-release-play/action.yml):
 
 1. Unit tests  
 2. Signed AAB (upload keystore)  

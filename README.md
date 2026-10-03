@@ -9,30 +9,44 @@ GitHub Actions partagées pour les apps Android GeoKing (KMP / Compose).
 ## Prérequis
 
 Ce dépôt doit être **public** (ou accessible via GitHub Team+) pour que les apps
-appellent les workflows réutilisables :
+appellent les actions / workflows `gk-*` :
 
 ```yaml
 jobs:
-  build:
-    uses: ludoo0d0a/geoking-ci/.github/workflows/android-ci.yml@main
-    secrets: inherit
+  release:
+    runs-on: ubuntu-latest
+    env:
+      # Secrets mappés dans le YAML de l'APP — jamais dans geoking-ci
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      WEB_CLIENT_ID: ${{ secrets.WEB_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ludoo0d0a/geoking-ci/actions/gk-release-play@main
+        with:
+          package_name: fr.geoking.myapp
 ```
 
 Les scripts locaux (release, manifest, adb) vivent dans
 **[geoking-tools](https://github.com/ludoo0d0a/geoking-tools)** — ce repo ne
-contient que les Actions réutilisables + la composite `setup-gradle`.
+contient que les Actions `gk-*` (logique générique). **Aucun**
+`${{ secrets.* }}` app ni liste d’API keys ici : l’app exporte l’env ; geoking-ci
+lit l’env.
 
 ## Contenu
 
 | Chemin | Rôle |
 |---|---|
-| `actions/setup-gradle/` | JDK 21 + Gradle (composite action) |
-| `.github/workflows/android-ci.yml` | Workflow réutilisable — build debug + artefact APK |
-| `.github/workflows/release-play.yml` | Workflow réutilisable — AAB signé + upload Play |
-| `.github/workflows/cloudflare-pages.yml` | Workflow réutilisable — deploy `website/` → Cloudflare Pages |
-| `.github/workflows/website-screenshots.yml` | Workflow réutilisable — Roborazzi + sync `website/assets` |
+| `actions/gk-setup-gradle/` | JDK 21 + Gradle (composite) |
+| `actions/gk-release-play/` | Composite — tests → AAB signé → upload Play (lit l’env caller) |
+| `.github/workflows/gk-android-ci.yml` | Workflow réutilisable optionnel — assemble debug (lit l’env caller) |
+| `.github/workflows/gk-cloudflare-pages.yml` | Workflow réutilisable — deploy `website/` → Cloudflare Pages |
+| `.github/workflows/gk-website-screenshots.yml` | Workflow réutilisable — Roborazzi + sync `website/assets` |
 | `docs/local-release.md` | **Fallback hors CI** — `geoking-tools` `build-and-publish.sh` |
 | `docs/play-service-account-permissions.md` | Pointeur vers la doc permissions Play (geoking-tools) |
+
+Les YAML **app** gardent des noms courts (`android-ci.yml`, `release-play.yml`).
+Les YAML **partagés** sont préfixés `gk-` pour éviter la confusion.
 
 ## Bootstrap (côté app)
 
@@ -56,30 +70,49 @@ voir INTEGRATION §1 et §6.
 
 ## Workflows app (templates)
 
-Copie depuis `geoking-tools/templates/` :
+Copie depuis `geoking-tools/templates/` — l’app déclare **tout** le mapping
+`secrets → env` (signing, Play, Firebase, API keys produit).
 
 ```yaml
-# .github/workflows/android-ci.yml
+# .github/workflows/android-ci.yml (inline + env app)
+env:
+  GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+  WEB_CLIENT_ID: ${{ secrets.WEB_CLIENT_ID }}
 jobs:
   build:
-    uses: ludoo0d0a/geoking-ci/.github/workflows/android-ci.yml@main
-    with:
-      artifact_name: myapp-debug-apk
-    secrets: inherit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # checkout geoking-ci + geoking-tools, then:
+      - uses: ./geoking-ci/actions/gk-setup-gradle
+      - run: bash geoking-ci/scripts/write-google-services.sh composeApp/google-services.json
+      - run: ./gradlew :composeApp:assembleDebug
+        env:
+          GK_TOOLS: ${{ github.workspace }}/geoking-tools
 ```
 
 ```yaml
 # .github/workflows/release-play.yml
+env:
+  KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 || secrets.SIGNING_KEY }}
+  KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || secrets.KEY_STORE_PASSWORD }}
+  KEY_ALIAS: ${{ secrets.KEY_ALIAS || secrets.ALIAS }}
+  KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+  PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON || secrets.SERVICE_ACCOUNT_JSON }}
+  GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+  WEB_CLIENT_ID: ${{ secrets.WEB_CLIENT_ID }}
 jobs:
   release:
-    uses: ludoo0d0a/geoking-ci/.github/workflows/release-play.yml@main
-    with:
-      package_name: fr.geoking.myapp
-      is_workflow_dispatch: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
-      workflow_dispatch_track: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.track || '' }}
-      workflow_dispatch_skip_review: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.changesNotSentForReview && 'true' || 'false' }}
-      version_name_override: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-    secrets: inherit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ludoo0d0a/geoking-ci/actions/gk-release-play@main
+        with:
+          package_name: fr.geoking.myapp
+          is_workflow_dispatch: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
+          workflow_dispatch_track: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.track || '' }}
+          workflow_dispatch_skip_review: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.changesNotSentForReview && 'true' || 'false' }}
+          version_name_override: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
 ```
 
 Si le module n’est pas `:composeApp`, passer aussi `gradle_module`, `apk_glob`,
@@ -87,52 +120,39 @@ Si le module n’est pas `:composeApp`, passer aussi `gradle_module`, `apk_glob`
 
 ## Concurrency (allowOneBuildAtOnce)
 
-Tous les workflows réutilisables appliquent **cancelPreviousRunningBuild** via
-`concurrency` + `cancel-in-progress: true` (un seul run à la fois ; le nouveau
-annule l’ancien) :
+Les workflows réutilisables `gk-*` et les templates app appliquent
+`concurrency` + `cancel-in-progress: true` :
 
-| Workflow | Groupe |
+| Artefact | Groupe |
 |---|---|
-| `android-ci.yml` | `android-ci-${{ github.repository }}-${{ github.ref }}` |
-| `release-play.yml` | `play-release-${{ github.repository }}` |
-| `cloudflare-pages.yml` | `cloudflare-pages-${{ github.repository }}-${{ github.ref }}` |
-| `website-screenshots.yml` | `website-screenshots-${{ github.repository }}` |
+| `gk-android-ci.yml` | `android-ci-${{ github.repository }}-${{ github.ref }}` |
+| app `release-play` / composite | `play-release` (côté app) |
+| `gk-cloudflare-pages.yml` | `cloudflare-pages-${{ github.repository }}-${{ github.ref }}` |
+| `gk-website-screenshots.yml` | `website-screenshots-${{ github.repository }}` |
 
-Les templates app (`geoking-tools`) gardent aussi un `concurrency` côté caller
-pour annuler **tout** le workflow appelant (jobs locaux + `uses:`). Ne pas
-désactiver ce comportement.
-
-## Inputs des workflows réutilisables
-
-### `android-ci.yml`
+## Inputs `gk-release-play`
 
 | Input | Défaut | Description |
 |---|---|---|
-| `artifact_name` | *(requis)* | Nom de l'artefact APK uploadé |
-| `gradle_module` | `:composeApp` | Module Gradle (aligner avec le manifest) |
-| `java_version` | `21` | Version JDK |
-
-### `release-play.yml`
-
-| Input | Défaut | Description |
-|---|---|---|
-| `package_name` | *(requis)* | `applicationId` Play (= `project.package` du manifest) |
+| `package_name` | *(requis)* | `applicationId` Play |
 | `gradle_module` | `:composeApp` | Module Gradle |
 | `bundle_task` | `bundleRelease` | Task Gradle (`bundlePlaystoreRelease` pour flavors) |
-| `version_code_override` | `max(run_number, props+1, Play+1)` | Force `VERSION_CODE` (rare; leave empty) |
+| `version_code_override` | empty | Force `VERSION_CODE` (rare) |
 | `java_version` | `21` | Version JDK |
 
-## Landing page (Cloudflare Pages + screenshots)
+Env attendu du caller (non exhaustif) : `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`,
+`KEY_ALIAS`, `KEY_PASSWORD`, `PLAY_SERVICE_ACCOUNT_JSON`, `GOOGLE_SERVICES_JSON`,
+plus toute API key lue par le `build.gradle.kts` de l’app.
 
-Callers minces dans l’app (templates `geoking-tools`) :
+## Landing page (Cloudflare Pages + screenshots)
 
 ```yaml
 # .github/workflows/cloudflare-pages.yml
 jobs:
   deploy:
-    uses: ludoo0d0a/geoking-ci/.github/workflows/cloudflare-pages.yml@main
+    uses: ludoo0d0a/geoking-ci/.github/workflows/gk-cloudflare-pages.yml@main
     with:
-      pages_project_name: myapp   # ← wrangler / Pages project
+      pages_project_name: myapp
     secrets: inherit
 ```
 
@@ -140,40 +160,24 @@ jobs:
 # .github/workflows/website-screenshots.yml
 jobs:
   screenshots:
-    uses: ludoo0d0a/geoking-ci/.github/workflows/website-screenshots.yml@main
+    uses: ludoo0d0a/geoking-ci/.github/workflows/gk-website-screenshots.yml@main
     with:
       screenshot_locales: ${{ github.event.inputs.screenshot_locales || 'en,fr' }}
       copy_only: ${{ github.event.inputs.copy_only || 'false' }}
     secrets: inherit
 ```
 
-| Input (`cloudflare-pages`) | Défaut | Description |
-|---|---|---|
-| `pages_project_name` | *(requis)* | Nom du projet Cloudflare Pages |
-| `deploy_dir` | `website` | Dossier publié |
-| `production_branch` | `main` | Branche prod à la création du projet |
+Secrets Cloudflare (déclarés sur le reusable) : `CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_ACCOUNT_ID`.
 
-| Input (`website-screenshots`) | Défaut | Description |
-|---|---|---|
-| `screenshot_locales` | `en,fr` | Locales Roborazzi / fill |
-| `copy_only` | `false` | `true` = skip Gradle, fill only |
-| `gradle_command` | `generateWebsiteScreenshots` | Task Gradle |
+## Secrets (dépôt app uniquement)
 
-Secrets GitHub : `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
-
-## Secrets requis (par dépôt app)
-
-`GOOGLE_SERVICES_JSON`, `WEB_CLIENT_ID`, `GEMINI_API_KEY`, `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`, `PLAY_SERVICE_ACCOUNT_JSON`
-
-Optional (passed through to Gradle when present; blank if unset): `REVENUECAT_API_KEY`, `PEXELS_API_KEY`, `UNSPLASH_ACCESS_KEY`, `UNSPLASH_SECRET_KEY`, `PIXABAY_API_KEY`, `COVERR_API_KEY`, `EUROPEANA_API_KEY`, `HARVARD_API_KEY`, `SMITHSONIAN_API_KEY`, `DEBUG_DEV`
-
-Configurer via `./scripts/setup-release.sh` ([geoking-tools](https://github.com/ludoo0d0a/geoking-tools)).  
+Configurer via `./scripts/setup-release.sh` ([geoking-tools](https://github.com/ludoo0d0a/geoking-tools)).
+Mapper chaque secret vers `env:` dans les workflows **de l’app**.
 Le manifest (`project.id`, Play IDs, chemins Gradle) se remplit avec
 `./scripts/project-manifest.sh` — pas dans ce dépôt.
 
 ### Actions minutes épuisés ?
-
-Publie depuis la machine locale (même flux que ce workflow) :
 
 ```bash
 ./scripts/build-and-publish.sh              # piste internal
@@ -182,6 +186,5 @@ Publie depuis la machine locale (même flux que ce workflow) :
 
 Détail : [`docs/local-release.md`](docs/local-release.md).
 
-**Play Console permissions** for that service account (testing / production / listing):  
-→ [`docs/play-service-account-permissions.md`](docs/play-service-account-permissions.md)  
-(canonical detail in [geoking-tools](https://github.com/ludoo0d0a/geoking-tools/blob/main/playstore-listing/service-account-permissions.md))
+**Play Console permissions** for that service account:  
+→ [`docs/play-service-account-permissions.md`](docs/play-service-account-permissions.md)

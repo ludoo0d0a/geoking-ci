@@ -1,6 +1,6 @@
 # Play Console — service account permissions (for `release-play`)
 
-The reusable workflow [`.github/workflows/release-play.yml`](../.github/workflows/release-play.yml)
+The composite action [`actions/gk-release-play`](../actions/gk-release-play/action.yml)
 uploads a signed AAB (and optional what’s new) with a Play **service account** JSON
 (`SERVICE_ACCOUNT_JSON` secret).
 

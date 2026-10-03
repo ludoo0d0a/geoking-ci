@@ -84,7 +84,7 @@ jobs:
 
       - name: Setup Gradle (JDK + Android SDK)
         if: ${{ inputs.copy_only != 'true' }}
-        uses: ./geoking-ci/actions/setup-gradle
+        uses: ./geoking-ci/actions/gk-setup-gradle
         with:
           gradle-version: ${{ inputs.gradle_version }}
           java-version: ${{ inputs.java_version }}
