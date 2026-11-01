@@ -16,6 +16,14 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # Ubuntu 26 (ubuntu-latest rollout) mounts /tmp as a ~7.8G tmpfs. Gradle
+    # Android builds exceed that quota; keep temp files on the runner disk.
+    - name: Point temp dirs at runner disk
+      shell: bash
+      run: |
+        echo "TMPDIR=${RUNNER_TEMP}" >> "$GITHUB_ENV"
+        echo "GRADLE_OPTS=-Djava.io.tmpdir=${RUNNER_TEMP} ${GRADLE_OPTS:-}" >> "$GITHUB_ENV"
+
     - name: Set up JDK
       uses: actions/setup-java@v4
       with:

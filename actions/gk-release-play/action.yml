@@ -308,25 +308,46 @@ runs:
             echo "Build ${VERSION_CODE}" > playstore/whatsnew/whatsnew-en-US
           fi
 
-      - name: Upload to Google Play (skip review)
-        if: inputs.is_workflow_dispatch == 'true' && inputs.workflow_dispatch_skip_review == 'true'
-        uses: r0adkll/upload-google-play@v1
-        with:
-          serviceAccountJsonPlainText: ${{ env.PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: ${{ inputs.package_name }}
-          releaseFiles: ${{ inputs.aab_glob }}
-          whatsNewDirectory: playstore/whatsnew
-          tracks: ${{ inputs.workflow_dispatch_track || inputs.default_track }}
-          status: completed
-          changesNotSentForReview: true
-
       - name: Upload to Google Play
-        if: inputs.is_workflow_dispatch != 'true' || inputs.workflow_dispatch_skip_review != 'true'
-        uses: r0adkll/upload-google-play@v1
-        with:
-          serviceAccountJsonPlainText: ${{ env.PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: ${{ inputs.package_name }}
-          releaseFiles: ${{ inputs.aab_glob }}
-          whatsNewDirectory: playstore/whatsnew
-          tracks: ${{ inputs.workflow_dispatch_track || inputs.default_track }}
-          status: completed
+        shell: bash
+        env:
+          TRACK: ${{ inputs.workflow_dispatch_track || inputs.default_track }}
+          SKIP_REVIEW: ${{ (inputs.is_workflow_dispatch == 'true' && inputs.workflow_dispatch_skip_review == 'true') && 'true' || 'false' }}
+          AAB_GLOB: ${{ inputs.aab_glob }}
+          PACKAGE_NAME: ${{ inputs.package_name }}
+        run: |
+          set -euo pipefail
+          # shellcheck source=/dev/null
+          . geoking-tools/lib/ui.sh
+          # shellcheck source=/dev/null
+          . geoking-tools/lib/play-api.sh
+          need jq openssl curl
+          export APP_ID="$PACKAGE_NAME"
+          export ROOT="${GITHUB_WORKSPACE}"
+          SA_FILE="${RUNNER_TEMP}/play-sa-upload.json"
+          printf '%s\n' "$PLAY_SERVICE_ACCOUNT_JSON" > "$SA_FILE"
+          TOKEN="$(gk_google_sa_access_token "$SA_FILE")"
+          shopt -s nullglob
+          AABS=( $AAB_GLOB )
+          shopt -u nullglob
+          if [ "${#AABS[@]}" -eq 0 ]; then
+            echo "::error::No AAB matched ${AAB_GLOB}"
+            exit 1
+          fi
+          AAB="${AABS[0]}"
+          echo "Uploading ${AAB} to Play track=${TRACK} skip_review=${SKIP_REVIEW}"
+          attempt=1
+          max=3
+          while true; do
+            if gk_play_release_aab "$TOKEN" "$AAB" "$TRACK" "$SKIP_REVIEW" >/dev/null; then
+              echo "Play upload committed (attempt ${attempt})"
+              break
+            fi
+            if [ "$attempt" -ge "$max" ]; then
+              echo "::error::Play upload failed after ${attempt} attempts"
+              exit 1
+            fi
+            echo "Play upload failed (attempt ${attempt}/${max}); retrying in 30s…"
+            attempt=$((attempt + 1))
+            sleep 30
+          done
